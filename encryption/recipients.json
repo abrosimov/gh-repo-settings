@@ -1,6 +1,13 @@
 {
   "recipients": [
     {
+      "fingerprint": "SHA256:AnxjIWWcb2OQreVuBksQcA2AxImy6VXXia6CvnzfgOE",
+      "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbtsSrM4k6uI4FyCIMDiHr0au+oZT1Rj6YrQJwLzrly",
+      "comment": "gh-repo-settings-ci",
+      "nonce": "M+MbwONYRkU1Bd2o",
+      "wrapped_key": "pbWh86E4d02mCdHWKn11LIJK2FFv3WFuP7VAh3XL10H6DNea01Gt+SM1UQgTkier"
+    },
+    {
       "fingerprint": "SHA256:UQbUG++B7Ce02k6W68QTc7SwdPmfVykSfH9t1uIpTJU",
       "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAx33cV1P4oXVjyiSC/tFlhuDSFR8fRtgJ7fkjkTP3lB",
       "comment": "kirill@macbook",

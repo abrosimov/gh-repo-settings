@@ -30,7 +30,12 @@ locals {
   #   declared_repositories = {
   #     "new-service" = { visibility = "private", description = "…" }
   #   }
-  declared_repositories = {}
+  declared_repositories = {
+    "gh-repo-settings" = {
+      visibility  = "public"
+      description = "Unified GitHub repository and organisation settings for abrosimov and abrosimov-tech, managed with OpenTofu"
+    }
+  }
 
   # Forks follow their upstream's conventions, not this baseline. The search
   # already leaves them out; the filter keeps that true if the query changes.

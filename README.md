@@ -56,8 +56,14 @@ so the default branch always carries the state that matches its configuration.
      needs: [lint, test] # every other job
      runs-on: ubuntu-latest
      steps:
-       - run: test "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" = false
+       - run: test "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = false
    ```
+
+   A skipped job does not fail the gate, so a job skipped on purpose (`if:` on a release step)
+   is fine. A job skipped because one it needs failed still fails the gate through that failure.
+
+   The workflow must run on every pull request: a `paths:` filter leaves pull requests outside
+   those paths without the check, and they never merge.
 
 2. Once it is on the default branch, add the topic `ci-gated` to the repository and apply.
 

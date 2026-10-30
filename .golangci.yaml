@@ -1,0 +1,275 @@
+version: "2"
+run:
+  modules-download-mode: readonly
+  allow-parallel-runners: true
+  # Every _test.go in this repository carries a build tag, so a linter with no
+  # tags configured loads none of them: `task lint` has been passing over a
+  # corpus it never read. Demonstrated rather than inferred — an unused
+  # function with an if/else return, planted in log/context_test.go, produced
+  # 0 issues.
+  #
+  # Every test-suite tag is listed, so no test file is invisible to the
+  # linter whichever suite it belongs to.
+  build-tags:
+    - unit
+    - functional
+    - integration
+    - e2e
+linters:
+  enable:
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - contextcheck
+    - containedctx
+    - copyloopvar
+    - dogsled
+    - dupl
+    - durationcheck
+    - embeddedstructfieldcheck
+    - err113
+    - errname
+    - errorlint
+    - exhaustive
+    - forbidigo
+    - forcetypeassert
+    - funcorder
+    - funlen
+    - gocheckcompilerdirectives
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - goprintffuncname
+    - gosec
+    - intrange
+    - ireturn
+    - lll
+    - makezero
+    - misspell
+    - mnd
+    - modernize
+    - musttag
+    - nakedret
+    - nilerr
+    - nilnil
+    - noctx
+    - nolintlint
+    - perfsprint
+    - prealloc
+    - protogetter
+    - reassign
+    - recvcheck
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    - spancheck
+    - testifylint
+    - testpackage
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - whitespace
+    - zerologlint
+  settings:
+    dupl:
+      threshold: 100
+    errcheck:
+      disable-default-exclusions: true
+      check-type-assertions: true
+      check-blank: true
+    exhaustive:
+      default-signifies-exhaustive: false
+      default-case-required: true
+      check:
+        - switch
+        - map
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^print(ln)?$
+        - pattern: ^panic$
+        - pattern: ^fmt\.Print.*$
+        - pattern: ^exec\.Command$
+          msg: use exec.CommandContext instead
+    funcorder:
+      struct-method: false
+    funlen:
+      lines: 50
+      statements: 50
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+    gocritic:
+      disabled-checks:
+        - octalLiteral
+        - paramTypeCombine
+        - sloppyReassign
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+      settings:
+        hugeParam:
+          sizeThreshold: 33
+    gocyclo:
+      min-complexity: 16
+    ireturn:
+      # Defaults plus `generic`: returning a type parameter (e.g. V from a
+      # typed sync.Map wrapper) is not returning an interface — the concrete
+      # type is fixed at instantiation.
+      allow:
+        - anon
+        - error
+        - empty
+        - stdlib
+        - generic
+    gosec:
+      severity: low
+      confidence: low
+      config:
+        G302: "0600"
+        G306: "0600"
+    govet:
+      enable-all: true
+    lll:
+      line-length: 140
+    misspell:
+      locale: UK
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: false
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+    rules:
+      # NO_COLOR is the canonical name of the no-color.org convention's
+      # environment variable; only the upper-case spelling is exempted so
+      # prose stays British.
+      - linters:
+          - misspell
+        text: '`COLOR` is a misspelling'
+
+      # ---------------------------------------------------------------------
+      # What a linter means in a test file.
+      #
+      # Once build-tags made the test corpus visible, each linter had to be
+      # answered once — does it say something about a test, or only that it
+      # was written for production code? The rules below are that answer, and
+      # every finding a rule does not cover was fixed in the test rather than
+      # excluded here. Silencing per finding would have answered the question
+      # by accident, one file at a time.
+      #
+      # Note what is deliberately *not* here: bodyclose, contextcheck, dupl,
+      # errorlint, nilerr, noctx, staticcheck, testifylint and the rest apply
+      # to a test exactly as they apply to a handler, because the mistakes
+      # they name are mistakes wherever they happen.
+      # ---------------------------------------------------------------------
+
+      # A dynamic error in a test is a fixture or a diagnostic: nobody calls
+      # errors.Is on it, because the only consumer is a require message a
+      # person reads. err113 exists so that a *caller* can match an error, and
+      # a test's errors have no caller.
+      - linters:
+          - err113
+        path: _test\.go
+
+      # errcheck keeps its default excluded-symbols list in tests, and loses
+      # it in production code — which is what disable-default-exclusions above
+      # is for. Two families of that list occur here: the print calls whose
+      # output *is* a godoc example's assertion, and WriteString on a
+      # bytes.Buffer or strings.Builder, documented never to return an error.
+      # forbidigo forbids fmt.Print* everywhere it is not a godoc example, so
+      # the print half cannot leak into ordinary test code.
+      - linters:
+          - errcheck
+        path: _test\.go
+        text: Error return value of `(fmt\.Print(f|ln)?|[\w.]+\.WriteString)` is not checked
+
+      # check-blank likewise: in production an `_ =` hides an error from
+      # review, which is what that setting is for. In a test it is the author
+      # saying the error was considered and does not matter — closing a pipe
+      # end in a cleanup, tearing down best effort. Only the explicit form is
+      # exempt, so an error nobody looked at is still reported.
+      - linters:
+          - errcheck
+        path: _test\.go
+        source: _ =
+
+      # A test table is a sample, chosen for what it demonstrates. Requiring
+      # it to enumerate an enum makes the table grow with the enum rather than
+      # with the cases worth showing.
+      - linters:
+          - exhaustive
+        path: _test\.go
+
+      # A table-driven test's length is its table, and a suite's setup is as
+      # long as the fixture it builds. Complexity is a different question and
+      # stays asked: gocognit and gocyclo run over tests unchanged.
+      - linters:
+          - funlen
+        path: _test\.go
+
+      # min-occurrences is 2, and a fixture literal repeated twice is what a
+      # table looks like. Hoisting each into a constant moves the value away
+      # from the case it belongs to, which is where a reader needs it.
+      - linters:
+          - goconst
+        path: _test\.go
+
+      # The memory layout of a fixture struct is not a property of anything.
+      # The rest of govet's enable-all set applies to tests untouched.
+      - linters:
+          - govet
+        path: _test\.go
+        text: 'fieldalignment:'
+
+      # Likewise for gocritic's copy-cost checks: a helper or a table loop
+      # copying a couple of hundred bytes once per case costs nothing, and
+      # the pointers adopted to satisfy them would make the fixtures mutable
+      # for no reason. gocritic's diagnostic and opinionated checks stay on.
+      - linters:
+          - gocritic
+        path: _test\.go
+        text: '(hugeParam|rangeValCopy):'
+
+      # A test helper returns what the API under test consumes, and when that
+      # API takes an interface — grpcx.Service, server.Runnable — returning
+      # the concrete type would make every call site convert.
+      - linters:
+          - ireturn
+        path: _test\.go
+
+      # G122 is about a path that could be swapped between the walk and the
+      # read. The corpus these suites walk is the repository's own working
+      # tree, in a process that is the only writer to it.
+      - linters:
+          - gosec
+        path: _test\.go
+        text: 'G122:'
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  enable:
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/abrosimov/gh-repo-settings
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

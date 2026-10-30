@@ -1,0 +1,19 @@
+{
+  "recipients": [
+    {
+      "fingerprint": "SHA256:UQbUG++B7Ce02k6W68QTc7SwdPmfVykSfH9t1uIpTJU",
+      "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAx33cV1P4oXVjyiSC/tFlhuDSFR8fRtgJ7fkjkTP3lB",
+      "comment": "kirill@macbook",
+      "nonce": "+k4FAZnL7W2sRXgY",
+      "wrapped_key": "L+WW0V9l6SL82I5TA1FbSHk4kTesPEYT+CLKwf4XnmgMOMrQH11TVLF3L8k5UZ2r"
+    },
+    {
+      "fingerprint": "SHA256:lFI9KfXem0AUoOgLMJT/HcQWY+vDMWsRG7KUJSxwsww",
+      "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPo6y/n43GOp4iHNfj3XccGjfTNjp5VT5CeduhWs0jZ2",
+      "comment": "kirillabrosimov@Kirills-MacBook-Pro-2.local",
+      "nonce": "XPMrYN1cU3/qKmX9",
+      "wrapped_key": "RjC3uZLPsvA89uUCSGA64gEwrVm0m3NwdSIwP+ptsDLY3mocmh+eUMQSCULAzmCO"
+    }
+  ],
+  "version": 1
+}

@@ -8,13 +8,22 @@ terraform {
     }
   }
 
-  # The state is committed to a public repository, so it is never written
-  # in the clear. The key comes from the owner's ssh-agent through
-  # cmd/tofu-sshagent-key; paths are relative to the stack directory,
-  # which is the working directory under `tofu -chdir`.
+  # The state lives on the tofu-state branch, checked out as a worktree in
+  # .tofu-state at the repository root, so CI can commit it without
+  # touching the protected default branch. See the README.
+  backend "local" {
+    path = "../../.tofu-state/abrosimov.tfstate"
+  }
+
+  # The state is in a public repository, so it is never written in the
+  # clear. The key comes from an enrolled key in ssh-agent through
+  # cmd/tofu-sshagent-key, run with `go run` so nothing has to be built
+  # first. GOTOOLCHAIN=auto lets go fetch the toolchain go.mod pins where
+  # the environment says local. Paths are relative to the stack directory,
+  # the working directory under `tofu -chdir`.
   encryption {
     key_provider "external" "sshagent" {
-      command = ["../../bin/tofu-sshagent-key", "key", "--recipients", "../../encryption/recipients.json"]
+      command = ["env", "GOTOOLCHAIN=auto", "go", "run", "../../cmd/tofu-sshagent-key", "key", "--recipients", "../../encryption/recipients.json"]
     }
 
     method "aes_gcm" "sshagent" {

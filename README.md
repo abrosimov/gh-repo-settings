@@ -26,6 +26,8 @@ visibility — are set only when OpenTofu creates a repository and never touched
   organisation settings and its Actions policy.
 - `cmd/tofu-sshagent-key` — the key provider OpenTofu runs to encrypt and decrypt state.
 - `encryption/recipients.json` — the state key wrapped once per enrolled SSH key. Public by design.
+- `stacks/abrosimov/delivery.tf` — this repository's CI/CD environments and the state branch rule.
+- branch `tofu-state` — the encrypted state files.
 
 ## Creating a repository
 
@@ -47,21 +49,62 @@ Every repository's default branch is `master`. A repository whose default branch
 gets it renamed on the next apply. An empty repository has no branch yet, so its first push decides:
 push `master` first.
 
-## Running it
+## How changes ship
 
-Requirements: OpenTofu 1.13 or newer, Go as pinned in `go.mod`, the `gh` CLI logged in with full
-scopes, and an enrolled ed25519 key in `ssh-agent`.
+CI does the work; a laptop is only needed for keys and emergencies.
+
+1. Open a pull request. The `plan` job plans both stacks with read-only tokens and puts each plan
+   in the run's summary; a failed plan fails `required`.
+2. Merge it. The `apply` job applies both stacks with write tokens and commits the state to the
+   `tofu-state` branch.
+
+Secrets live in two environments of this repository and are set with `gh secret set --env`:
+
+| Secret | `plan` | `apply` |
+|---|---|---|
+| `CI_SSH_KEY` | the CI ed25519 private key, enrolled as a state-key recipient | same |
+| `GH_TOKEN_ABROSIMOV` | fine-grained token for `abrosimov`, read-only | same owner, read and write |
+| `GH_TOKEN_ABROSIMOV_TECH` | fine-grained token for `abrosimov-tech`, read-only | same owner, read and write |
+
+`apply` is reachable from `master` only; `plan` runs for pull requests from this repository, never
+from forks. The environments themselves are managed in `stacks/abrosimov/delivery.tf`; their secret
+values never pass through OpenTofu.
+
+## State
+
+The state of each stack is a file on the `tofu-state` branch: `abrosimov.tfstate`,
+`abrosimov-tech.tfstate`. The baseline ruleset protects only the default branch, so CI pushes the
+branch with the workflow token; a separate ruleset forbids deleting or force-pushing it.
+
+## Running it locally
+
+Requirements: OpenTofu 1.13 or newer, Go as pinned in `go.mod`, the `gh` CLI logged in (the
+provider uses `gh auth token` when `GITHUB_TOKEN` is unset), and an enrolled ed25519 key in
+`ssh-agent`. Check out the state branch once, as a worktree at the repository root:
 
 ```sh
-make plan                       # stack abrosimov
-make apply
-make plan OWNER=abrosimov-tech  # organisation stack
-make apply OWNER=abrosimov-tech
-make check                      # everything CI runs
+git worktree add .tofu-state tofu-state
 ```
 
-Apply from the feature branch and commit the updated `terraform.tfstate` in the same pull request,
-so the default branch always carries the state that matches its configuration.
+Then, from the repository root:
+
+```sh
+git -C .tofu-state pull
+tofu -chdir=stacks/abrosimov init
+tofu -chdir=stacks/abrosimov plan
+```
+
+The organisation stack needs the billing email, which the API requires on every update and which is
+kept out of this repository:
+
+```sh
+export TF_VAR_billing_email="$(gh api orgs/abrosimov-tech --jq .billing_email)"
+```
+
+After a local apply, commit and push the state from `.tofu-state`, so CI starts from it.
+
+The checks CI runs: `go vet -tags unit ./...`, `go test -tags unit ./...`, golangci-lint at the
+version in `.github/workflows/ci.yml`, `tofu fmt -check -recursive`, and `tofu validate` per stack.
 
 ## Gating a repository on CI
 
@@ -104,13 +147,18 @@ once per enrolled SSH key; each wrapping key is derived from an ed25519 signatur
 `ssh-agent`, so only someone holding an enrolled key can decrypt.
 
 ```sh
-make key-list    # enrolled keys, and which are in the agent now
-make key-enroll  # wrap the key for every new ed25519 key in the agent
-bin/tofu-sshagent-key revoke --recipients encryption/recipients.json SHA256:…
+go run ./cmd/tofu-sshagent-key list --recipients encryption/recipients.json
+go run ./cmd/tofu-sshagent-key enroll --recipients encryption/recipients.json
+go run ./cmd/tofu-sshagent-key revoke --recipients encryption/recipients.json SHA256:…
 ```
 
-To enrol a new laptop, have an already enrolled key and the new key in the agent at the same time,
-run `make key-enroll` and commit `encryption/recipients.json`.
+`list` shows the enrolled keys and which are in the agent now; `enroll` wraps the key for every new
+ed25519 key in the agent. To enrol a new laptop, have an already enrolled key and the new key in the
+agent at the same time, run `enroll` and commit `encryption/recipients.json`.
+
+The CI key (`gh-repo-settings-ci`) was enrolled the same way: added to the agent for one `enroll`,
+then removed. To replace it, generate a new key, enrol it, store it in `CI_SSH_KEY` in both
+environments, and revoke the old fingerprint.
 
 Revoking a key removes its wrapping but not its knowledge of the data key, and the git history
 keeps every earlier state. If a key is compromised, rotate the data key: move the current
@@ -129,4 +177,4 @@ instance), and drop it from `declared_repositories` if it is there:
 tofu -chdir=stacks/abrosimov state rm 'module.repo["<name>"]'
 ```
 
-Then commit the updated state.
+Then commit and push the updated state from `.tofu-state`.

@@ -3,13 +3,20 @@ locals {
   is_ci_gate = contains(var.topics, var.ci_gate_topic)
 }
 
-# Policy only. Identity and presentation — name, description, topics,
-# visibility — stay with whoever edits them on GitHub, so the baseline can
-# never flip a private repository public or rename one. The repository is
-# imported, not created, and must survive any mistake in this configuration:
-# prevent_destroy stops the plan, archive_on_destroy is the second line.
+# Policy only. Identity and presentation — description, topics, visibility —
+# are set when OpenTofu creates the repository and stay with whoever edits
+# them on GitHub afterwards, so the baseline can never flip a private
+# repository public. Every repository must survive any mistake in this
+# configuration: prevent_destroy stops the plan, archive_on_destroy is the
+# second line.
 resource "github_repository" "this" {
-  name = var.name
+  name        = var.name
+  visibility  = var.visibility
+  description = var.description
+
+  # A created repository gets an initial commit, so it has a branch for
+  # github_branch_default to make master.
+  auto_init = true
 
   has_issues   = true
   has_wiki     = false
@@ -71,6 +78,20 @@ resource "github_repository" "this" {
       vulnerability_alerts,
     ]
   }
+}
+
+# An empty repository has no branch to make the default; its first push
+# decides, so push master first.
+resource "github_branch_default" "this" {
+  count = var.current_branch == "" ? 0 : 1
+
+  repository = github_repository.this.name
+  branch     = var.default_branch
+
+  # The provider renames only when the current default differs, so on a
+  # repository already on master this is a no-op.
+  rename          = true
+  wait_for_rename = true
 }
 
 # Renovate reads the alerts to raise its security pull requests, so the

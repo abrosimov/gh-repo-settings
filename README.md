@@ -15,7 +15,8 @@ Every repository gets the same policy from [`modules/repo-baseline`](modules/rep
 | Actions | on or off per owner or per repository (see below); all actions allowed; pinning to a full commit SHA enforced once every workflow is pinned (`enforce_sha_pinning` in the stack); `GITHUB_TOKEN` read-only by default and unable to approve pull requests |
 | Security | Dependabot alerts on (Renovate reads them), Dependabot security pull requests off (Renovate raises them); secret scanning and push protection on public repositories |
 
-Identity and presentation — name, description, topics, visibility — are never touched.
+The default branch is always `master`. Identity and presentation — name, description, topics,
+visibility — are set only when OpenTofu creates a repository and never touched afterwards.
 
 ## Layout
 
@@ -26,8 +27,25 @@ Identity and presentation — name, description, topics, visibility — are neve
 - `cmd/tofu-sshagent-key` — the key provider OpenTofu runs to encrypt and decrypt state.
 - `encryption/recipients.json` — the state key wrapped once per enrolled SSH key. Public by design.
 
-No repository is named in the configuration: this repository is public and most of the others are
-not. Keep it that way, and do not paste plan output into issues, pull requests or CI logs.
+## Creating a repository
+
+Declare it in `declared_repositories` in the owner's stack and apply:
+
+```hcl
+declared_repositories = {
+  "new-service" = { visibility = "private", description = "What it is for" }
+}
+```
+
+It is created with an initial commit on `master`, and the baseline applies from the first apply.
+Visibility and description are set at creation only; later edits happen on GitHub. A repository
+created by hand needs no declaration: the next apply adopts it.
+
+## Default branch
+
+Every repository's default branch is `master`. A repository whose default branch has another name
+gets it renamed on the next apply. An empty repository has no branch yet, so its first push decides:
+push `master` first.
 
 ## Running it
 
@@ -104,8 +122,8 @@ again, so nothing is lost but the history.
 ## When a repository leaves the set
 
 Archiving, transferring or deleting a repository removes it from discovery, and the next plan stops
-at `prevent_destroy`. Forget it from the state rather than with a `removed` block, which would
-put the name into this public repository:
+at `prevent_destroy`. Forget it from the state (a `removed` block cannot name a single `for_each`
+instance), and drop it from `declared_repositories` if it is there:
 
 ```sh
 tofu -chdir=stacks/abrosimov state rm 'module.repo["<name>"]'

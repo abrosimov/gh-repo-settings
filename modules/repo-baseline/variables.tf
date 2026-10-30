@@ -13,6 +13,24 @@ variable "visibility" {
   }
 }
 
+variable "description" {
+  description = "Repository description, applied when OpenTofu creates the repository and ignored afterwards."
+  type        = string
+  default     = null
+}
+
+variable "current_branch" {
+  description = "Default branch as GitHub reports it, null for a repository OpenTofu is about to create. An empty repository reports the account's default branch name although it has no branch; when that is already master, setting it is a no-op. An empty string skips the setting."
+  type        = string
+  default     = null
+}
+
+variable "default_branch" {
+  description = "Default branch every repository must have; an existing default branch of another name is renamed to it."
+  type        = string
+  default     = "master"
+}
+
 variable "topics" {
   description = "Repository topics as GitHub reports them. The topic named by ci_gate_topic opts the repository into the required CI check."
   type        = list(string)

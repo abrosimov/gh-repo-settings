@@ -14,8 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 # Static checks only. This repository is public, so the job holds no token
-# and no key: plan and apply run on the owner's machine, never here, which
-# also keeps plan output — repository names included — out of public logs.
+# and no key: plan and apply run on the owner's machine, never here.
 jobs:
   go:
     name: go

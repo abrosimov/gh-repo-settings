@@ -9,6 +9,12 @@ variable "billing_email" {
 resource "github_organization_settings" "this" {
   billing_email = var.billing_email
 
+  # The provider sends every field on each update, so one left out is
+  # cleared: the display name and sign-off are restated as GitHub had them
+  # on 2026-11-01. An update that cleared the name was refused with 422.
+  name                        = "abrosimov.tech"
+  web_commit_signoff_required = true
+
   default_repository_permission           = "read"
   members_can_create_public_repositories  = false
   members_can_create_private_repositories = true

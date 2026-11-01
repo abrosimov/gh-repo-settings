@@ -1,6 +1,6 @@
-# Existing repositories are discovered on every plan, so one created by hand
-# is adopted by the next apply without an edit. A repository to be created
-# by OpenTofu is declared in declared_repositories below.
+# declared_repositories below is the list of repositories this owner has.
+# Discovery reads what GitHub has on every plan, only to check the list
+# against it and to read the attributes GitHub owns.
 data "github_repositories" "owned" {
   query = "user:${local.owner} archived:false"
 }
@@ -23,19 +23,71 @@ locals {
   # from starting at all.
   enforce_sha_pinning = false
 
-  # Repositories OpenTofu creates. Visibility and description apply at
-  # creation only; afterwards they are edited on GitHub, like those of any
-  # discovered repository. Once created, an entry may stay or go: discovery
-  # keeps the repository managed either way.
+  # Every repository OpenTofu creates is generated from this template,
+  # unless its entry sets template = null.
+  repository_template = {
+    owner      = local.owner
+    repository = "repo-template"
+  }
+
+  # Every repository of this owner, forks aside. A repository on GitHub but
+  # not here stops the plan; one here but not on GitHub is created. The
+  # attributes apply at creation only; afterwards visibility, description
+  # and topics are edited on GitHub, so an existing repository needs none.
   #
-  #   declared_repositories = {
-  #     "new-service" = { visibility = "private", description = "…" }
+  #   "new-service" = {
+  #     visibility  = "private"    # required to create
+  #     description = "…"
+  #     topics      = ["ci-gated"] # optional
+  #     is_template = false        # optional
+  #     template    = null         # optional: an empty repository instead
   #   }
   declared_repositories = {
+    "2026-june-ai-ideas-synthesis"    = {}
+    "agents-hooks-guard"              = {}
+    "aletheia"                        = {}
+    "apme"                            = {}
+    "cv"                              = {}
+    "daidalos"                        = {}
+    "devbox-setup"                    = {}
+    "drive"                           = {}
+    "fpf-to-obsidian-vault-converter" = {}
     "gh-repo-settings" = {
       visibility  = "public"
       description = "Unified GitHub repository and organisation settings for abrosimov and abrosimov-tech, managed with OpenTofu"
     }
+    "go-core"                 = {}
+    "go-devtools"             = {}
+    "go-kdl2"                 = {}
+    "go-provider"             = {}
+    "grpcApp"                 = {}
+    "kadmos"                  = {}
+    "llm-orchestrator"        = {}
+    "llm-tools-configuration" = {}
+    "ncp_database"            = {}
+    "nomos"                   = {}
+    "obsidian-content-plugin" = {}
+    "obsidian-notes"          = {}
+    "obsidian-tasks-system"   = {}
+    "otelcol-otelbox"         = {}
+    "personal-iwe-template"   = {}
+    "pinax"                   = {}
+    "politeia"                = {}
+    "proj"                    = {}
+    "py-core"                 = {}
+    "renovate-config"         = {}
+    "repo-template" = {
+      visibility  = "public"
+      description = "Starting point for new repositories: pinned Renovate preset, CI with the required check, Apache-2.0"
+      topics      = ["actions-enabled"]
+      is_template = true
+      template    = null
+    }
+    "setup_lab"                 = {}
+    "tamias"                    = {}
+    "vddl"                      = {}
+    "warp-and-weft"             = {}
+    "workbench-design-spec-tmp" = {}
   }
 
   # Forks follow their upstream's conventions, not this baseline. The search
@@ -50,18 +102,40 @@ locals {
     if !repo.fork
   }
 
+  undeclared_repositories = setsubtract(keys(local.discovered_repositories), keys(local.declared_repositories))
+  repositories_to_create  = setsubtract(keys(local.declared_repositories), keys(local.discovered_repositories))
+
   # What GitHub reports wins over the declaration once the repository exists.
-  repositories = merge(
-    {
-      for name, repo in local.declared_repositories : name => {
-        visibility     = repo.visibility
+  repositories = {
+    for name, repo in local.declared_repositories : name => merge(
+      contains(local.repositories_to_create, name) ? {
+        visibility     = try(repo.visibility, null)
         description    = try(repo.description, null)
-        topics         = []
+        topics         = tolist(try(repo.topics, []))
         default_branch = null
-      }
-    },
-    local.discovered_repositories,
-  )
+      } : local.discovered_repositories[name],
+      {
+        is_template = try(repo.is_template, false)
+        template    = contains(local.repositories_to_create, name) ? try(repo.template, local.repository_template) : null
+      },
+    )
+  }
+}
+
+# Holds the checks of the list against GitHub, so a mismatch stops the plan
+# in a pull request and in the scheduled run on master.
+resource "terraform_data" "inventory" {
+  lifecycle {
+    precondition {
+      condition     = length(local.undeclared_repositories) == 0
+      error_message = "Repositories on GitHub but not in declared_repositories: ${join(", ", sort(local.undeclared_repositories))}. Add them to stacks/abrosimov/repositories.tf."
+    }
+
+    precondition {
+      condition     = alltrue([for name in local.repositories_to_create : try(local.declared_repositories[name].visibility, null) != null])
+      error_message = "Repositories in declared_repositories but not on GitHub, without a visibility to create them with: ${join(", ", sort([for name in local.repositories_to_create : name if try(local.declared_repositories[name].visibility, null) == null]))}. Declare a visibility to create one, or remove the entry of one that was archived, transferred or deleted (see the README)."
+    }
+  }
 }
 
 module "repo" {
@@ -73,18 +147,20 @@ module "repo" {
   description    = each.value.description
   topics         = each.value.topics
   current_branch = each.value.default_branch
+  is_template    = each.value.is_template
+  template       = each.value.template
 
   actions_enabled      = local.actions_enabled
   actions_required     = each.key == local.delivery_repository
   sha_pinning_required = local.enforce_sha_pinning
 }
 
-# Adopts each discovered repository; a no-op for those already in state,
-# including the ones OpenTofu created. A repository that leaves the set
-# (archived, transferred, deleted) stops the plan at prevent_destroy: forget
-# it with `tofu state rm`, see the README.
+# Adopts each declared repository that already exists; a no-op for those
+# already in state, including the ones OpenTofu created. A repository that
+# leaves GitHub (archived, transferred, deleted) must leave the list and the
+# state too, see the README.
 import {
-  for_each = local.discovered_repositories
+  for_each = { for name, repo in local.discovered_repositories : name => repo if contains(keys(local.declared_repositories), name) }
 
   to = module.repo[each.key].github_repository.this
   id = each.key

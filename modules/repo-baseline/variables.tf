@@ -19,6 +19,21 @@ variable "description" {
   default     = null
 }
 
+variable "is_template" {
+  description = "Whether the repository is a template others are generated from. Applied when OpenTofu creates the repository and ignored afterwards."
+  type        = bool
+  default     = false
+}
+
+variable "template" {
+  description = "Template the repository is generated from when OpenTofu creates it, null for an empty repository with an initial commit. Pass it for a repository about to be created only: the provider reports a permanent difference for one that already exists."
+  type = object({
+    owner      = string
+    repository = string
+  })
+  default = null
+}
+
 variable "current_branch" {
   description = "Default branch as GitHub reports it, null for a repository OpenTofu is about to create. An empty repository reports the account's default branch name although it has no branch; when that is already master, setting it is a no-op. An empty string skips the setting."
   type        = string
@@ -32,7 +47,7 @@ variable "default_branch" {
 }
 
 variable "topics" {
-  description = "Repository topics as GitHub reports them. The topic named by ci_gate_topic opts the repository into the required CI check."
+  description = "Repository topics as GitHub reports them, or as declared for a repository OpenTofu is about to create, which gets them at creation. The topic named by ci_gate_topic opts the repository into the required CI check."
   type        = list(string)
   default     = []
 }

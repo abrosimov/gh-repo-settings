@@ -3,20 +3,33 @@ locals {
   is_ci_gate = contains(var.topics, var.ci_gate_topic)
 }
 
-# Policy only. Identity and presentation — description, topics, visibility —
-# are set when OpenTofu creates the repository and stay with whoever edits
-# them on GitHub afterwards, so the baseline can never flip a private
-# repository public. Every repository must survive any mistake in this
-# configuration: prevent_destroy stops the plan, archive_on_destroy is the
-# second line.
+# Policy only. Identity and presentation — description, topics, visibility,
+# whether it is a template — are set when OpenTofu creates the repository
+# and stay with whoever edits them on GitHub afterwards, so the baseline can
+# never flip a private repository public. Every repository must survive any
+# mistake in this configuration: prevent_destroy stops the plan,
+# archive_on_destroy is the second line.
 resource "github_repository" "this" {
   name        = var.name
   visibility  = var.visibility
   description = var.description
+  topics      = var.topics
+  is_template = var.is_template
 
   # A created repository gets an initial commit, so it has a branch for
-  # github_branch_default to make master.
+  # github_branch_default to make master. Generating from a template makes
+  # that commit instead, signed by GitHub, and the provider ignores this.
   auto_init = true
+
+  dynamic "template" {
+    for_each = var.template == null ? [] : [var.template]
+
+    content {
+      owner                = template.value.owner
+      repository           = template.value.repository
+      include_all_branches = false
+    }
+  }
 
   has_issues   = true
   has_wiki     = false

@@ -21,9 +21,11 @@ visibility — are set only when OpenTofu creates a repository and never touched
 ## Layout
 
 - `modules/repo-baseline` — the per-repository policy.
-- `stacks/abrosimov`, `stacks/abrosimov-tech` — one root per owner. Each discovers its repositories
-  on every plan and adopts new ones through `import` blocks; the organisation stack also manages
-  organisation settings and its Actions policy.
+- `stacks/abrosimov`, `stacks/abrosimov-tech` — one root per owner. Each lists every repository the
+  owner has in `declared_repositories`, checks the list against GitHub on every plan, and adopts
+  existing ones through `import` blocks; the organisation stack also manages organisation settings
+  and its Actions policy.
+- `repo-template` (a repository of `abrosimov`) — the template new repositories are generated from.
 - `cmd/tofu-sshagent-key` — the key provider OpenTofu runs to encrypt and decrypt state.
 - `encryption/recipients.json` — the state key wrapped once per enrolled SSH key. Public by design.
 - `stacks/abrosimov/delivery.tf` — this repository's CI/CD environments and the state branch rule.
@@ -31,17 +33,28 @@ visibility — are set only when OpenTofu creates a repository and never touched
 
 ## Creating a repository
 
-Declare it in `declared_repositories` in the owner's stack and apply:
+`declared_repositories` in the owner's stack is the list of every repository the owner has, forks
+aside. Add an entry with a visibility and merge:
 
 ```hcl
-declared_repositories = {
-  "new-service" = { visibility = "private", description = "What it is for" }
+"new-service" = {
+  visibility  = "private"
+  description = "What it is for"
+  topics      = ["actions-enabled"] # optional
 }
 ```
 
-It is created with an initial commit on `master`, and the baseline applies from the first apply.
-Visibility and description are set at creation only; later edits happen on GitHub. A repository
-created by hand needs no declaration: the next apply adopts it.
+In `abrosimov` it is generated from `repo-template`: a pinned Renovate preset, CI with the
+`required` check, `.gitignore` and the Apache-2.0 licence, in one commit GitHub signs. Set
+`template = null` for an empty repository with an initial commit instead; `abrosimov-tech` has no
+template yet. Later changes to the template never reach repositories already generated from it.
+
+Visibility, description, topics and `is_template` are set at creation only; later edits happen on
+GitHub, which is why an existing repository's entry is empty (`"cv" = {}`).
+
+The list and GitHub must agree. A repository created by hand on GitHub stops every plan until it has
+an entry — the plan names it — and the daily scheduled plan on `master` fails until then, which
+GitHub reports by mail. Adding the entry adopts the repository on the next apply.
 
 ## Default branch
 
@@ -174,12 +187,14 @@ again, so nothing is lost but the history.
 
 ## When a repository leaves the set
 
-Archiving, transferring or deleting a repository removes it from discovery, and the next plan stops
-at `prevent_destroy`. Forget it from the state (a `removed` block cannot name a single `for_each`
-instance), and drop it from `declared_repositories` if it is there:
+Archiving, transferring or deleting a repository removes it from discovery while its entry is still
+in `declared_repositories`, and the plan stops: an entry with no visibility cannot be created, and
+one with a visibility would be created again. Open a pull request that drops the entry; dropping it
+alone stops the plan at `prevent_destroy`, so before merging, forget the repository from the state
+(a `removed` block cannot name a single `for_each` instance):
 
 ```sh
 tofu -chdir=stacks/abrosimov state rm 'module.repo["<name>"]'
 ```
 
-Then commit and push the updated state with `task state:push`.
+Then push the updated state with `task state:push` and merge.

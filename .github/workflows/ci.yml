@@ -5,14 +5,20 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  # A daily plan of master: a repository created on GitHub but not declared,
+  # or a broken token, fails it, and GitHub mails the failure.
+  schedule:
+    - cron: "41 5 * * *"
 
 permissions:
   contents: read
 
 # A newer push to a pull request cancels its older run; a run on master is
-# never cancelled, because it may be halfway through an apply.
+# never cancelled, because it may be halfway through an apply. The scheduled
+# run has a group of its own: sharing master's would let it cancel a push
+# run still waiting to apply.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'schedule' && 'schedule' || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -66,12 +72,12 @@ jobs:
             tofu -chdir="$stack" validate
           done
 
-  # Pull requests from this repository only: a fork gets no secrets, and
-  # its plan would fail for that reason alone. The plan lands in the run's
-  # summary.
+  # Pull requests from this repository only, and the daily run: a fork gets
+  # no secrets, and its plan would fail for that reason alone. The plan
+  # lands in the run's summary.
   plan:
     name: plan (${{ matrix.stack }})
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     environment: plan
     strategy:

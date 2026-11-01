@@ -140,6 +140,9 @@ Adding the topic first blocks every merge, because the required check never repo
 A `ci-gated` repository cannot have Actions off: the plan stops, because the required check would
 never report and every merge would block.
 
+`gh-repo-settings` keeps Actions on whatever the switch and its topics say: its own CI applies this
+configuration, so with Actions off there only a local apply could turn them back on.
+
 ## State encryption
 
 The state and plan files are encrypted with AES-GCM. The key is a random data key, stored wrapped

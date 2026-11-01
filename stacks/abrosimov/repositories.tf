@@ -74,6 +74,7 @@ module "repo" {
   current_branch = each.value.default_branch
 
   actions_enabled      = local.actions_enabled
+  actions_required     = each.key == local.delivery_repository
   sha_pinning_required = local.enforce_sha_pinning
 }
 

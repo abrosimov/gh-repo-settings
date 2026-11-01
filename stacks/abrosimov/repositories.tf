@@ -14,7 +14,8 @@ data "github_repository" "owned" {
 locals {
   # Stack-wide switch for GitHub Actions. One repository is switched against
   # it with the topic actions-enabled or actions-disabled.
-  actions_enabled = true
+  # Off since 2026-11-01 to save Actions minutes while the baseline settles.
+  actions_enabled = false
 
   # Off until every workflow is pinned. On 2026-10-30, 63 action references
   # in 12 workflows still named a tag; Renovate's pinning pull requests for
@@ -74,6 +75,7 @@ module "repo" {
   current_branch = each.value.default_branch
 
   actions_enabled      = local.actions_enabled
+  actions_required     = each.key == local.delivery_repository
   sha_pinning_required = local.enforce_sha_pinning
 }
 

@@ -49,6 +49,12 @@ variable "actions_enabled" {
   default     = true
 }
 
+variable "actions_required" {
+  description = "Keeps GitHub Actions on whatever the stack-wide switch and the topics say. For a repository whose own CI applies this configuration: with Actions off there, only a local apply could turn them back on."
+  type        = bool
+  default     = false
+}
+
 variable "actions_enabled_topic" {
   description = "Topic that turns GitHub Actions on for one repository whatever the stack-wide switch says."
   type        = string

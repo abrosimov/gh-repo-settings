@@ -9,12 +9,15 @@ on:
 permissions:
   contents: read
 
+# A newer push to a pull request cancels its older run; a run on master is
+# never cancelled, because it may be halfway through an apply.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Static checks only. This repository is public, so the job holds no token
-# and no key: plan and apply run on the owner's machine, never here.
+env:
+  GOLANGCI_LINT_VERSION: v2.15.0
+
 jobs:
   go:
     name: go
@@ -29,13 +32,17 @@ jobs:
           go-version-file: go.mod
 
       - name: Vet
-        run: make vet
+        run: go vet -tags unit ./...
 
       - name: Test
-        run: make test
+        run: go test -tags unit ./...
 
+      # Built with the toolchain go.mod pins: a golangci-lint built with an
+      # older Go refuses to lint code that targets a newer one.
       - name: Lint
-        run: make lint
+        run: |
+          go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
+          "$(go env GOPATH)/bin/golangci-lint" run ./...
 
   tofu:
     name: tofu
@@ -50,18 +57,177 @@ jobs:
           tofu_wrapper: false
 
       - name: Format
-        run: make fmt-check
+        run: tofu fmt -check -recursive
 
       - name: Validate
-        run: make validate
+        run: |
+          for stack in stacks/*; do
+            tofu -chdir="$stack" init -backend=false -input=false >/dev/null
+            tofu -chdir="$stack" validate
+          done
+
+  # Pull requests from this repository only: a fork gets no secrets, and
+  # its plan would fail for that reason alone. The plan lands in the run's
+  # summary.
+  plan:
+    name: plan (${{ matrix.stack }})
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: [abrosimov, abrosimov-tech]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Check out the state
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: tofu-state
+          path: .tofu-state
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_wrapper: false
+
+      - name: Load the state key into ssh-agent
+        env:
+          CI_SSH_KEY: ${{ secrets.CI_SSH_KEY }}
+        run: |
+          eval "$(ssh-agent -a "$RUNNER_TEMP/agent.sock")" >/dev/null
+          printf '%s\n' "$CI_SSH_KEY" | ssh-add -q -
+          echo "SSH_AUTH_SOCK=$RUNNER_TEMP/agent.sock" >> "$GITHUB_ENV"
+
+      - name: Read the organisation billing email
+        if: matrix.stack == 'abrosimov-tech'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN_ABROSIMOV_TECH }}
+        run: |
+          email="$(gh api orgs/abrosimov-tech --jq .billing_email)"
+          echo "::add-mask::$email"
+          echo "TF_VAR_billing_email=$email" >> "$GITHUB_ENV"
+
+      # Chosen in the shell rather than with `a && x || y`, which would hand
+      # one owner's token to the other's stack whenever x is empty.
+      - name: Plan
+        env:
+          TOKEN_ABROSIMOV: ${{ secrets.GH_TOKEN_ABROSIMOV }}
+          TOKEN_ABROSIMOV_TECH: ${{ secrets.GH_TOKEN_ABROSIMOV_TECH }}
+          OWNER: ${{ matrix.stack }}
+          STACK: stacks/${{ matrix.stack }}
+        run: |
+          case "$OWNER" in
+            abrosimov) GITHUB_TOKEN="$TOKEN_ABROSIMOV" ;;
+            abrosimov-tech) GITHUB_TOKEN="$TOKEN_ABROSIMOV_TECH" ;;
+          esac
+          if [ -z "$GITHUB_TOKEN" ]; then
+            echo "::error::No token for $OWNER in the plan environment"
+            exit 1
+          fi
+          export GITHUB_TOKEN
+          tofu -chdir="$STACK" init -input=false
+          tofu -chdir="$STACK" plan -input=false -lock=false -no-color -out=tfplan
+          {
+            echo "## Plan: ${{ matrix.stack }}"
+            echo '```'
+            tofu -chdir="$STACK" show -no-color tfplan
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # The one check the baseline ruleset requires, in this repository and in
-  # every other one tagged ci-gated: it stands for all the jobs above.
+  # every other one tagged ci-gated: it stands for all the jobs above. A job
+  # skipped on purpose (plan on a push) does not fail it.
   required:
     name: required
     if: always()
-    needs: [go, tofu]
+    needs: [go, tofu, plan]
     runs-on: ubuntu-latest
     steps:
       - name: All jobs passed
         run: test "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = false
+
+  # Applies both stacks after a merge and commits the state to the
+  # tofu-state branch, which the baseline ruleset does not cover, so the
+  # workflow token can push it. The state is committed even when an apply
+  # fails, because a failed apply may still have changed something.
+  apply:
+    name: apply
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [go, tofu]
+    runs-on: ubuntu-latest
+    environment: apply
+    concurrency:
+      group: tofu-apply
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Check out the state
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: tofu-state
+          path: .tofu-state
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_wrapper: false
+
+      - name: Load the state key into ssh-agent
+        env:
+          CI_SSH_KEY: ${{ secrets.CI_SSH_KEY }}
+        run: |
+          eval "$(ssh-agent -a "$RUNNER_TEMP/agent.sock")" >/dev/null
+          printf '%s\n' "$CI_SSH_KEY" | ssh-add -q -
+          echo "SSH_AUTH_SOCK=$RUNNER_TEMP/agent.sock" >> "$GITHUB_ENV"
+
+      - name: Apply abrosimov
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_ABROSIMOV }}
+        run: |
+          tofu -chdir=stacks/abrosimov init -input=false
+          tofu -chdir=stacks/abrosimov apply -input=false -auto-approve -no-color
+
+      - name: Apply abrosimov-tech
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN_ABROSIMOV_TECH }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_ABROSIMOV_TECH }}
+        run: |
+          email="$(gh api orgs/abrosimov-tech --jq .billing_email)"
+          echo "::add-mask::$email"
+          export TF_VAR_billing_email="$email"
+          tofu -chdir=stacks/abrosimov-tech init -input=false
+          tofu -chdir=stacks/abrosimov-tech apply -input=false -auto-approve -no-color
+
+      - name: Commit the state
+        if: always()
+        working-directory: .tofu-state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "State unchanged"
+            exit 0
+          fi
+          git commit -m "Apply ${GITHUB_SHA}"
+          git push origin HEAD:tofu-state

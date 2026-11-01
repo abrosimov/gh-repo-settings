@@ -17,7 +17,8 @@ data "github_repository" "owned" {
 locals {
   # Stack-wide switch for GitHub Actions. One repository is switched against
   # it with the topic actions-enabled or actions-disabled.
-  actions_enabled = true
+  # Off since 2026-11-01 to save Actions minutes while the baseline settles.
+  actions_enabled = false
 
 
   # Repositories OpenTofu creates. Visibility and description apply at

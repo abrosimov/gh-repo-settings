@@ -1,0 +1,157 @@
+version: "3"
+
+vars:
+  # CI pins the version; reading it from there keeps one source.
+  GOLANGCI_LINT_VERSION:
+    sh: "sed -n 's/^  GOLANGCI_LINT_VERSION: //p' .github/workflows/ci.yml"
+  MODULE: github.com/abrosimov/gh-repo-settings
+  RECIPIENTS: encryption/recipients.json
+  # The stack to plan or apply: abrosimov or abrosimov-tech.
+  OWNER: '{{.OWNER | default "abrosimov"}}'
+  STACK: stacks/{{.OWNER}}
+
+env:
+  # go.mod pins the toolchain; auto lets go fetch it even where the
+  # environment says GOTOOLCHAIN=local. golangci-lint inherits it when it
+  # shells out to go.
+  GOTOOLCHAIN: auto
+
+tasks:
+  check:
+    desc: Run every check CI runs
+    cmds:
+      - task: fmt-check
+      - task: vet
+      - task: test
+      - task: lint
+      - task: validate
+
+  fmt:
+    desc: Format OpenTofu and Go sources
+    cmds:
+      - tofu fmt -recursive
+      - goimports -local {{.MODULE}} -w cmd internal
+
+  fmt-check:
+    desc: Fail on unformatted OpenTofu sources
+    cmds:
+      - tofu fmt -check -recursive
+
+  vet:
+    cmds:
+      - go vet -tags unit ./...
+
+  test:
+    cmds:
+      - go test -tags unit ./...
+
+  # Built with the toolchain go.mod pins, because a golangci-lint built with
+  # an older Go refuses to lint code that targets a newer one.
+  lint:
+    cmds:
+      - GOBIN="$PWD/bin" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{.GOLANGCI_LINT_VERSION}}
+      - bin/golangci-lint run ./...
+
+  validate:
+    desc: Validate every stack without touching the state
+    cmds:
+      - for: { var: STACKS }
+        cmd: tofu -chdir={{.ITEM}} init -backend=false -input=false >/dev/null && tofu -chdir={{.ITEM}} validate
+    vars:
+      STACKS:
+        sh: ls -d stacks/*
+
+  state:setup:
+    desc: Check out the state branch as a worktree in .tofu-state
+    status:
+      - test -d .tofu-state
+    cmds:
+      - git fetch -q origin tofu-state
+      - git worktree add .tofu-state tofu-state
+
+  state:pull:
+    desc: Bring the state up to date with what CI last committed
+    preconditions:
+      - sh: test -d .tofu-state
+        msg: "No state worktree: run `task state:setup` first."
+    cmds:
+      - git -C .tofu-state pull -q --ff-only
+
+  # Mirrors the apply job's commit, so CI starts from the state a laptop
+  # left behind.
+  state:push:
+    desc: Commit and push the state after a local apply or state edit
+    cmds:
+      - |
+        git -C .tofu-state add -A
+        if git -C .tofu-state diff --cached --quiet; then
+          echo "State unchanged"
+          exit 0
+        fi
+        git -C .tofu-state commit -q -m "Apply $(git rev-parse HEAD) locally"
+        git -C .tofu-state push -q origin HEAD:tofu-state
+
+  init:
+    preconditions:
+      - sh: test -d {{.STACK}}
+        msg: "No stack {{.STACK}}: OWNER must be abrosimov or abrosimov-tech."
+    cmds:
+      - tofu -chdir={{.STACK}} init -input=false
+
+  plan:
+    desc: "Plan one stack against the current state (OWNER=abrosimov|abrosimov-tech)"
+    env: &stack_env
+      # The organisation API refuses a settings update without the billing
+      # email, and the email must not be committed to this public repository.
+      TF_VAR_billing_email:
+        sh: '{{if eq .OWNER "abrosimov-tech"}}gh api orgs/abrosimov-tech --jq .billing_email{{else}}true{{end}}'
+    cmds:
+      - task: state:pull
+      - task: init
+      - tofu -chdir={{.STACK}} plan -input=false
+
+  # The emergency path; changes normally ship through a pull request. The
+  # preconditions close the three ways a local apply goes wrong: racing a
+  # CI apply, which shares no lock with a laptop; applying code master does
+  # not have, which the next CI apply reverts; and starting from a stale
+  # state. The state is pushed even when the apply fails part-way, because
+  # whatever it changed is recorded there.
+  apply:
+    desc: "Apply one stack from master and push the state (OWNER=abrosimov|abrosimov-tech)"
+    env: *stack_env
+    preconditions:
+      - sh: git fetch -q origin master && test "$(git rev-parse HEAD)" = "$(git rev-parse origin/master)"
+        msg: "HEAD is not origin/master: apply what master has, or ship the change through a pull request."
+      - sh: git diff --quiet HEAD -- stacks modules
+        msg: "Uncommitted changes under stacks or modules: the next CI apply would revert them."
+      - sh: test "$(gh run list --workflow ci.yml --branch master --json status --jq '[.[] | select(.status != "completed")] | length')" = 0
+        msg: "A CI run on master is still going and may be applying: wait for it to finish."
+      - sh: test -z "$(git -C .tofu-state status --porcelain)"
+        msg: "The state worktree has uncommitted changes: run `task state:push` or inspect them first."
+    cmds:
+      - task: state:pull
+      - task: init
+      - defer: { task: state:push }
+      - tofu -chdir={{.STACK}} apply -input=false
+
+  key:list:
+    desc: List enrolled state-key recipients and which are in ssh-agent
+    cmds:
+      - go run ./cmd/tofu-sshagent-key list --recipients {{.RECIPIENTS}}
+
+  key:init:
+    desc: Generate a new state key for every ed25519 key in ssh-agent (refuses to overwrite)
+    cmds:
+      - go run ./cmd/tofu-sshagent-key init --recipients {{.RECIPIENTS}}
+
+  key:enroll:
+    desc: Wrap the state key for every new ed25519 key in ssh-agent
+    cmds:
+      - go run ./cmd/tofu-sshagent-key enroll --recipients {{.RECIPIENTS}}
+
+  key:revoke:
+    desc: "Remove a state-key recipient (FINGERPRINT=SHA256:…)"
+    requires:
+      vars: [FINGERPRINT]
+    cmds:
+      - go run ./cmd/tofu-sshagent-key revoke --recipients {{.RECIPIENTS}} {{.FINGERPRINT}}

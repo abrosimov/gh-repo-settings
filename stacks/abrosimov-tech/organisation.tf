@@ -1,5 +1,5 @@
 variable "billing_email" {
-  description = "Billing email of the organisation. Required by the API on every update, and kept out of this public repository: the Makefile reads it from the API into TF_VAR_billing_email."
+  description = "Billing email of the organisation. Required by the API on every update, and kept out of this public repository: `task plan` and `task apply` read it from the API into TF_VAR_billing_email."
   type        = string
   sensitive   = true
 }

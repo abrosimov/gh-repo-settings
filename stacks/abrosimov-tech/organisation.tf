@@ -9,14 +9,18 @@ variable "billing_email" {
 resource "github_organization_settings" "this" {
   billing_email = var.billing_email
 
-  # The provider sends every field on each update, so one left out is
-  # cleared: the display name and sign-off are restated as GitHub had them
-  # on 2026-11-01. An update that cleared the name was refused with 422.
+  # Restated as GitHub has them, so the configuration says what the
+  # organisation looks like.
   name                        = "abrosimov.tech"
   web_commit_signoff_required = true
 
+  # Members may create public repositories too: GitHub refuses a
+  # private-only creation policy on this plan ("Private-only repository
+  # creation policy is not allowed for this organization", 422). The
+  # stricter policy it does allow is members_can_create_repositories =
+  # false, which takes private repositories from members as well.
   default_repository_permission           = "read"
-  members_can_create_public_repositories  = false
+  members_can_create_public_repositories  = true
   members_can_create_private_repositories = true
   members_can_fork_private_repositories   = false
   has_repository_projects                 = false

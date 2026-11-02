@@ -27,7 +27,7 @@ env:
 jobs:
   go:
     name: go
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -52,7 +52,7 @@ jobs:
 
   tofu:
     name: tofu
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -78,7 +78,7 @@ jobs:
   plan:
     name: plan (${{ matrix.stack }})
     if: github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     environment: plan
     strategy:
       fail-fast: false
@@ -156,7 +156,7 @@ jobs:
     name: required
     if: always()
     needs: [go, tofu, plan]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: All jobs passed
         run: test "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = false
@@ -169,7 +169,7 @@ jobs:
     name: apply
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs: [go, tofu]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     environment: apply
     concurrency:
       group: tofu-apply

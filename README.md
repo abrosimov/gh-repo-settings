@@ -130,7 +130,7 @@ there.
      name: required
      if: always()
      needs: [lint, test] # every other job
-     runs-on: ubuntu-latest
+     runs-on: ubuntu-26.04
      steps:
        - run: test "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = false
    ```

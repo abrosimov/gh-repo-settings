@@ -257,6 +257,10 @@ task key:revoke FINGERPRINT=SHA256:…
 ed25519 key in the agent. To enrol a new laptop, have an already enrolled key and the new key in the
 agent at the same time, run `task key:enroll` and commit `encryption/recipients.json`.
 
+`enroll` records the comment the agent reports, usually `user@hostname`, in a public file. Give the
+key a neutral comment first (`ssh-keygen -c -C mac-m1-pro-max-home -f ~/.ssh/id_ed25519`, then add it
+to the agent again), or edit `comment` in the file before committing.
+
 The CI key (`gh-repo-settings-ci`) was enrolled the same way: added to the agent for one `enroll`,
 then removed. To replace it, generate a new key, enrol it, store it in `CI_SSH_KEY` in both
 environments, and revoke the old fingerprint.

@@ -160,9 +160,92 @@ configuration, so with Actions off there only a local apply could turn them back
 
 ## State encryption
 
-The state and plan files are encrypted with AES-GCM. The key is a random data key, stored wrapped
-once per enrolled SSH key; each wrapping key is derived from an ed25519 signature made by
-`ssh-agent`, so only someone holding an enrolled key can decrypt.
+The state and plan files sit on a branch of a public repository, and they hold everything OpenTofu
+knows about the repositories. So they are never written in the clear: OpenTofu encrypts them with
+AES-GCM, and the key comes from `cmd/tofu-sshagent-key`, which OpenTofu runs as an external key
+provider. The goal is that whoever has an enrolled SSH key in `ssh-agent` (a laptop, CI) can read
+and write the state, nobody else can, and no symmetric secret has to be stored or passed around.
+
+### Two keys
+
+- **DEK, the data key** — a random 32-byte AES key that encrypts the state and plan files. There is
+  one for the whole repository, and it is never stored in the clear anywhere.
+- **KEK, a key-encryption key** — one per enrolled SSH key. It encrypts ("wraps") a copy of the DEK.
+  It is not stored either: it is derived anew on every run from a signature that `ssh-agent` makes.
+
+The DEK is wrapped once per enrolled key, and the wrapped copies are kept in
+`encryption/recipients.json`. Any one enrolled key unwraps its copy and gets the same DEK.
+Two levels keep the keys independent: adding or removing a laptop rewraps one copy of the DEK and
+leaves the state as it is, and every key sees the same state.
+
+### Deriving the KEK
+
+1. The agent signs a fixed challenge in the SSHSIG format, under the namespace
+   `tofu-state@gh-repo-settings`; that is what `ssh-keygen -Y sign -n tofu-state@gh-repo-settings`
+   would sign. The namespace keeps this signature apart from SSH logins and git commit signatures,
+   and the reverse: no signature made for another purpose yields the KEK.
+2. The signature is checked against the key, then fed to HKDF-SHA256 with the key's fingerprint as
+   the salt, which gives a 32-byte KEK.
+
+An ed25519 signature is deterministic, so the same key and the same challenge give the same KEK every
+time. That is why only ed25519 keys are accepted: ECDSA signatures are randomised, so their KEK
+would change from run to run.
+
+The signature only has to stay secret as long as the state does. Whoever can make your agent sign
+this challenge — through agent forwarding to a host you do not trust, say — can derive your KEK.
+
+### What a run does
+
+```mermaid
+flowchart TD
+    tofu["tofu plan / apply"] -- "external key provider" --> cmd["tofu-sshagent-key key"]
+    cmd -- "list keys" --> agent[("ssh-agent")]
+    cmd -- "read" --> file["encryption/recipients.json"]
+    agent -- "ed25519 key whose fingerprint<br/>is in recipients.json" --> sign
+    sign["agent signs the challenge<br/>(SSHSIG, namespace tofu-state@gh-repo-settings)"]
+    sign -- "signature" --> hkdf["HKDF-SHA256<br/>salt = fingerprint"]
+    hkdf -- "KEK" --> unwrap["AES-GCM open<br/>nonce + wrapped_key from the key's entry<br/>AAD = namespace + fingerprint"]
+    file -- "nonce, wrapped_key" --> unwrap
+    unwrap -- "DEK" --> tofu
+    tofu -- "AES-GCM with the DEK" --> state[(".tofu-state/*.tfstate<br/>branch tofu-state")]
+```
+
+The key provider tries the enrolled keys in the agent's order and stops at the first that unwraps
+its copy. The DEK goes to OpenTofu on stdout and is never written to disk.
+
+### `encryption/recipients.json`
+
+```json
+{
+  "recipients": [
+    {
+      "fingerprint": "SHA256:AnxjIWWcb2OQreVuBksQcA2AxImy6VXXia6CvnzfgOE",
+      "comment": "gh-repo-settings-ci",
+      "nonce": "M+MbwONYRkU1Bd2o",
+      "wrapped_key": "pbWh86E4d02mCdHWKn11LIJK2FFv3WFuP7VAh3XL10H6DNea01Gt+SM1UQgTkier"
+    }
+  ],
+  "version": 1
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `version` | Format version. A file with any other version is refused. |
+| `fingerprint` | SHA-256 fingerprint of the enrolled key, as `ssh-add -l -E sha256` prints it. It is how a key in the agent finds its entry, the HKDF salt, and part of the AAD, so a `wrapped_key` moved to another entry fails to open. |
+| `comment` | The key's comment in the agent when it was enrolled. For people only: `list` and `revoke` show it; it plays no part in the cryptography and can be edited by hand. |
+| `nonce` | The 12-byte AES-GCM nonce used to wrap this copy, base64. |
+| `wrapped_key` | The DEK encrypted under this key's KEK: 32 bytes of ciphertext and a 16-byte GCM tag, base64. |
+
+Entries are sorted by fingerprint. The public keys themselves are not stored: the agent supplies the
+key, and the fingerprint is enough to find its entry.
+
+The file is public by design. A `wrapped_key` opens only with a signature from its private key, and
+enrolling a new key needs the DEK, so it needs a key that is enrolled already. CI and every laptop
+read the file from the checkout, so it lives in the repository rather than on one machine; without it
+the DEK is gone.
+
+### Managing keys
 
 ```sh
 task key:list
@@ -173,6 +256,10 @@ task key:revoke FINGERPRINT=SHA256:…
 `list` shows the enrolled keys and which are in the agent now; `enroll` wraps the key for every new
 ed25519 key in the agent. To enrol a new laptop, have an already enrolled key and the new key in the
 agent at the same time, run `task key:enroll` and commit `encryption/recipients.json`.
+
+`enroll` records the comment the agent reports, usually `user@hostname`, in a public file. Give the
+key a neutral comment first (`ssh-keygen -c -C mac-m1-pro-max-home -f ~/.ssh/id_ed25519`, then add it
+to the agent again), or edit `comment` in the file before committing.
 
 The CI key (`gh-repo-settings-ci`) was enrolled the same way: added to the agent for one `enroll`,
 then removed. To replace it, generate a new key, enrol it, store it in `CI_SSH_KEY` in both

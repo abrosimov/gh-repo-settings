@@ -2,6 +2,7 @@ package envelope
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -10,12 +11,12 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-
-	"golang.org/x/crypto/ssh"
 )
 
 const (
 	FormatVersion = 1
+
+	fingerprintPrefix = "SHA256:"
 
 	gcmNonceSize    = 12
 	gcmTagSize      = 16
@@ -32,7 +33,6 @@ var (
 
 type Recipient struct {
 	Fingerprint string `json:"fingerprint"`
-	PublicKey   string `json:"public_key"`
 	Comment     string `json:"comment"`
 	Nonce       []byte `json:"nonce"`
 	WrappedKey  []byte `json:"wrapped_key"`
@@ -127,23 +127,12 @@ func (f *File) validate() error {
 }
 
 func (r *Recipient) validate() error {
-	fields := strings.Fields(r.PublicKey)
-	if len(fields) != 2 || fields[0] != ssh.KeyAlgoED25519 {
-		return fmt.Errorf("%w %s: public_key must be an ssh-ed25519 key without a comment", ErrInvalidRecipient, r.Fingerprint)
+	digest, ok := strings.CutPrefix(r.Fingerprint, fingerprintPrefix)
+	if !ok {
+		return fmt.Errorf("%w %q: fingerprint must start with %s", ErrInvalidRecipient, r.Fingerprint, fingerprintPrefix)
 	}
-	blob, err := base64.StdEncoding.DecodeString(fields[1])
-	if err != nil {
-		return fmt.Errorf("%w %s: decoding public_key: %w", ErrInvalidRecipient, r.Fingerprint, err)
-	}
-	key, err := ssh.ParsePublicKey(blob)
-	if err != nil {
-		return fmt.Errorf("%w %s: parsing public_key: %w", ErrInvalidRecipient, r.Fingerprint, err)
-	}
-	if key.Type() != ssh.KeyAlgoED25519 {
-		return fmt.Errorf("%w %s: public_key is %s", ErrInvalidRecipient, r.Fingerprint, key.Type())
-	}
-	if actual := ssh.FingerprintSHA256(key); actual != r.Fingerprint {
-		return fmt.Errorf("%w %s: public_key has fingerprint %s", ErrInvalidRecipient, r.Fingerprint, actual)
+	if raw, err := base64.RawStdEncoding.Strict().DecodeString(digest); err != nil || len(raw) != sha256.Size {
+		return fmt.Errorf("%w %q: fingerprint must be an unpadded base64 SHA-256 digest", ErrInvalidRecipient, r.Fingerprint)
 	}
 	if len(r.Nonce) != gcmNonceSize {
 		return fmt.Errorf("%w %s: nonce must be %d bytes", ErrInvalidRecipient, r.Fingerprint, gcmNonceSize)
@@ -152,10 +141,6 @@ func (r *Recipient) validate() error {
 		return fmt.Errorf("%w %s: wrapped_key must be %d bytes", ErrInvalidRecipient, r.Fingerprint, wrappedKeySize)
 	}
 	return nil
-}
-
-func authorizedKey(key ssh.PublicKey) string {
-	return strings.TrimSuffix(string(ssh.MarshalAuthorizedKey(key)), "\n")
 }
 
 func removeIfPresent(path string) error {

@@ -221,8 +221,8 @@ func TestInitWrapsForEveryEd25519KeyAndSkipsOthers(t *testing.T) {
 	for i := range file.Recipients {
 		r := &file.Recipients[i]
 		if r.Fingerprint == ssh.FingerprintSHA256(alice.public) {
-			if r.Comment != alice.comment || r.PublicKey != strings.TrimSpace(string(ssh.MarshalAuthorizedKey(alice.public))) {
-				t.Errorf("alice recipient = %+v, want comment %q and alice's authorised key", r, alice.comment)
+			if r.Comment != alice.comment {
+				t.Errorf("alice recipient = %+v, want comment %q", r, alice.comment)
 			}
 		}
 	}
@@ -468,18 +468,58 @@ func TestRevokeRejectsUnknownFingerprint(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsTamperedRecipient(t *testing.T) {
+func TestLoadRejectsMalformedRecipient(t *testing.T) {
 	path := recipientsPath(t)
 	mustInit(t, newKeyring(t, newEd25519Key(t, "alice")), path)
-	file := mustLoad(t, path)
-	file.Recipients[0].PublicKey = strings.TrimSpace(string(ssh.MarshalAuthorizedKey(newEd25519Key(t, "mallory").public)))
-	if err := file.Save(path); err != nil {
-		t.Fatalf("Save: %v", err)
+	valid := *mustLoad(t, path)
+
+	for name, tamper := range map[string]func(r *envelope.Recipient){
+		"fingerprint without prefix": func(r *envelope.Recipient) { r.Fingerprint = strings.TrimPrefix(r.Fingerprint, "SHA256:") },
+		"fingerprint with padding":   func(r *envelope.Recipient) { r.Fingerprint += "=" },
+		"fingerprint too short":      func(r *envelope.Recipient) { r.Fingerprint = r.Fingerprint[:len(r.Fingerprint)-4] },
+		"short nonce":                func(r *envelope.Recipient) { r.Nonce = r.Nonce[1:] },
+		"short wrapped key":          func(r *envelope.Recipient) { r.WrappedKey = r.WrappedKey[1:] },
+	} {
+		t.Run(name, func(t *testing.T) {
+			file := valid
+			file.Recipients = slices.Clone(valid.Recipients)
+			tamper(&file.Recipients[0])
+			tampered := filepath.Join(t.TempDir(), "recipients.json")
+			if err := file.Save(tampered); err != nil {
+				t.Fatalf("Save: %v", err)
+			}
+
+			_, err := envelope.Load(tampered)
+
+			if !errors.Is(err, envelope.ErrInvalidRecipient) {
+				t.Fatalf("err = %v, want ErrInvalidRecipient", err)
+			}
+		})
+	}
+}
+
+func TestLoadRejectsPublicKeyField(t *testing.T) {
+	path := recipientsPath(t)
+	mustInit(t, newKeyring(t, newEd25519Key(t, "alice")), path)
+	r := mustLoad(t, path).Recipients[0]
+	legacy, err := json.Marshal(map[string]any{
+		"version": envelope.FormatVersion,
+		"recipients": []map[string]any{{
+			"fingerprint": r.Fingerprint,
+			"public_key":  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbtsSrM4k6uI4FyCIMDiHr0au+oZT1Rj6YrQJwLzrly",
+			"comment":     r.Comment,
+			"nonce":       r.Nonce,
+			"wrapped_key": r.WrappedKey,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("encoding recipients file: %v", err)
+	}
+	if err := os.WriteFile(path, legacy, 0o600); err != nil {
+		t.Fatalf("writing recipients file: %v", err)
 	}
 
-	_, err := envelope.Load(path)
-
-	if !errors.Is(err, envelope.ErrInvalidRecipient) {
-		t.Fatalf("err = %v, want ErrInvalidRecipient", err)
+	if _, err := envelope.Load(path); err == nil {
+		t.Fatal("Load accepted a recipients file with the removed public_key field")
 	}
 }

@@ -184,7 +184,6 @@ func wrap(a Agent, key *agent.Key, dataKey []byte) (Recipient, error) {
 	}
 	return Recipient{
 		Fingerprint: fingerprint,
-		PublicKey:   authorizedKey(key),
 		Comment:     key.Comment,
 		Nonce:       nonce,
 		WrappedKey:  aead.Seal(nil, nonce, dataKey, []byte(wrapAADPrefix+fingerprint)),

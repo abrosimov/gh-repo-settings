@@ -71,11 +71,15 @@ locals {
     "obsidian-tasks-system"   = {}
     "otelcol-otelbox"         = {}
     "personal-iwe-template"   = {}
-    "pinax"                   = {}
-    "politeia"                = {}
-    "proj"                    = {}
-    "py-core"                 = {}
-    "renovate-config"         = {}
+    "pfs" = {
+      visibility  = "private"
+      description = "Personal finance system: budgeting and tracking of equity and assets"
+    }
+    "pinax"           = {}
+    "politeia"        = {}
+    "proj"            = {}
+    "py-core"         = {}
+    "renovate-config" = {}
     "repo-template" = {
       visibility  = "public"
       description = "Starting point for new repositories: pinned Renovate preset, CI with the required check, Apache-2.0"

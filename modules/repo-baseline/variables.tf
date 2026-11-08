@@ -47,39 +47,27 @@ variable "default_branch" {
 }
 
 variable "topics" {
-  description = "Repository topics as GitHub reports them, or as declared for a repository OpenTofu is about to create, which gets them at creation. The topic named by ci_gate_topic opts the repository into the required CI check."
+  description = "Repository topics as GitHub reports them, or as declared for a repository OpenTofu is about to create, which gets them at creation. Presentation only: no policy reads them."
   type        = list(string)
   default     = []
 }
 
-variable "ci_gate_topic" {
-  description = "Topic that makes the aggregator check required on the default branch. Set it only once the repository's CI exposes that check, otherwise every merge blocks."
-  type        = string
-  default     = "ci-gated"
+variable "ci_gated" {
+  description = "Whether the aggregator check is required on the default branch. Set it only once the repository's CI exposes that check, otherwise every merge blocks."
+  type        = bool
+  default     = false
 }
 
 variable "actions_enabled" {
-  description = "Stack-wide switch for GitHub Actions, used when the repository carries neither override topic."
+  description = "Whether GitHub Actions is on: the repository's own declaration, or the stack-wide switch when it declares none."
   type        = bool
   default     = true
 }
 
 variable "actions_required" {
-  description = "Keeps GitHub Actions on whatever the stack-wide switch and the topics say. For a repository whose own CI applies this configuration: with Actions off there, only a local apply could turn them back on."
+  description = "Keeps GitHub Actions on whatever actions_enabled says. For a repository whose own CI applies this configuration: with Actions off there, only a local apply could turn them back on."
   type        = bool
   default     = false
-}
-
-variable "actions_enabled_topic" {
-  description = "Topic that turns GitHub Actions on for one repository whatever the stack-wide switch says."
-  type        = string
-  default     = "actions-enabled"
-}
-
-variable "actions_disabled_topic" {
-  description = "Topic that turns GitHub Actions off for one repository whatever the stack-wide switch says."
-  type        = string
-  default     = "actions-disabled"
 }
 
 variable "sha_pinning_required" {

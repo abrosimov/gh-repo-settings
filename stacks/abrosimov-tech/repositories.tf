@@ -16,7 +16,7 @@ data "github_repository" "owned" {
 
 locals {
   # Stack-wide switch for GitHub Actions. One repository is switched against
-  # it with the topic actions-enabled or actions-disabled.
+  # it with actions_enabled in its entry below.
   # Off since 2026-11-01 to save Actions minutes while the baseline settles.
   actions_enabled = false
 
@@ -26,15 +26,18 @@ locals {
   repository_template = null
 
   # Every repository of this owner, forks aside. A repository on GitHub but
-  # not here stops the plan; one here but not on GitHub is created. The
-  # attributes apply at creation only; afterwards visibility, description
-  # and topics are edited on GitHub, so an existing repository needs none.
+  # not here stops the plan; one here but not on GitHub is created.
+  # visibility, description, topics and is_template apply at creation only;
+  # afterwards they are presentation and stay with GitHub. actions_enabled
+  # and ci_gated are policy and apply on every plan.
   #
   #   "new-service" = {
-  #     visibility  = "private"    # required to create
-  #     description = "…"
-  #     topics      = ["ci-gated"] # optional
-  #     is_template = false        # optional
+  #     visibility      = "private" # required to create
+  #     description     = "…"
+  #     topics          = ["go"]    # optional
+  #     is_template     = false     # optional
+  #     actions_enabled = true      # optional: overrides the stack-wide switch
+  #     ci_gated        = true      # optional: requires the check required
   #   }
   declared_repositories = {}
 
@@ -53,7 +56,8 @@ locals {
   undeclared_repositories = setsubtract(keys(local.discovered_repositories), keys(local.declared_repositories))
   repositories_to_create  = setsubtract(keys(local.declared_repositories), keys(local.discovered_repositories))
 
-  # What GitHub reports wins over the declaration once the repository exists.
+  # What GitHub reports wins over the declared presentation once the
+  # repository exists; the declared policy always wins.
   repositories = {
     for name, repo in local.declared_repositories : name => merge(
       contains(local.repositories_to_create, name) ? {
@@ -63,8 +67,10 @@ locals {
         default_branch = null
       } : local.discovered_repositories[name],
       {
-        is_template = try(repo.is_template, false)
-        template    = contains(local.repositories_to_create, name) ? try(repo.template, local.repository_template) : null
+        is_template     = try(repo.is_template, false)
+        template        = contains(local.repositories_to_create, name) ? try(repo.template, local.repository_template) : null
+        actions_enabled = try(repo.actions_enabled, local.actions_enabled)
+        ci_gated        = try(repo.ci_gated, false)
       },
     )
   }
@@ -98,7 +104,8 @@ module "repo" {
   is_template    = each.value.is_template
   template       = each.value.template
 
-  actions_enabled = local.actions_enabled
+  actions_enabled = each.value.actions_enabled
+  ci_gated        = each.value.ci_gated
 }
 
 # Adopts each declared repository that already exists; a no-op for those

@@ -31,7 +31,7 @@ resource "github_repository_ruleset" "baseline" {
   lifecycle {
     precondition {
       condition     = !(local.is_ci_gate && !local.actions_enabled)
-      error_message = "Repository ${var.name} is ci-gated but has GitHub Actions off: the required check would never report and every merge would block. Remove one of the two."
+      error_message = "Repository ${var.name} is declared ci_gated but has GitHub Actions off: the required check would never report and every merge would block. Change one of the two in its entry."
     }
   }
 

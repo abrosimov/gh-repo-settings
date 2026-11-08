@@ -1,14 +1,7 @@
 locals {
-  # A topic on the repository overrides the stack-wide switch in either
-  # direction; when both topics are present, disabled wins, because the
-  # safer reading of a contradiction is to run nothing. A repository that
-  # requires Actions ignores both, so no switch can cut it off.
-  actions_enabled = (
-    var.actions_required ? true :
-    contains(var.topics, var.actions_disabled_topic) ? false :
-    contains(var.topics, var.actions_enabled_topic) ? true :
-    var.actions_enabled
-  )
+  # A repository that requires Actions ignores the switch, so no
+  # declaration can cut it off.
+  actions_enabled = var.actions_required || var.actions_enabled
 }
 
 resource "github_actions_repository_permissions" "this" {

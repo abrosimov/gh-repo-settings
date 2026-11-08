@@ -13,7 +13,7 @@ data "github_repository" "owned" {
 
 locals {
   # Stack-wide switch for GitHub Actions. One repository is switched against
-  # it with the topic actions-enabled or actions-disabled.
+  # it with actions_enabled in its entry below.
   # Off since 2026-11-01 to save Actions minutes while the baseline settles.
   actions_enabled = false
 
@@ -31,16 +31,19 @@ locals {
   }
 
   # Every repository of this owner, forks aside. A repository on GitHub but
-  # not here stops the plan; one here but not on GitHub is created. The
-  # attributes apply at creation only; afterwards visibility, description
-  # and topics are edited on GitHub, so an existing repository needs none.
+  # not here stops the plan; one here but not on GitHub is created.
+  # visibility, description, topics, is_template and template apply at
+  # creation only; afterwards they are presentation and stay with GitHub.
+  # actions_enabled and ci_gated are policy and apply on every plan.
   #
   #   "new-service" = {
-  #     visibility  = "private"    # required to create
-  #     description = "…"
-  #     topics      = ["ci-gated"] # optional
-  #     is_template = false        # optional
-  #     template    = null         # optional: an empty repository instead
+  #     visibility      = "private" # required to create
+  #     description     = "…"
+  #     topics          = ["go"]    # optional
+  #     is_template     = false     # optional
+  #     template        = null      # optional: an empty repository instead
+  #     actions_enabled = true      # optional: overrides the stack-wide switch
+  #     ci_gated        = true      # optional: requires the check required
   #   }
   declared_repositories = {
     "2026-june-ai-ideas-synthesis" = {}
@@ -48,25 +51,32 @@ locals {
     "aletheia"                     = {}
     "apme"                         = {}
     "autarkeia" = {
-      visibility = "private"
+      visibility      = "private"
+      actions_enabled = true
     }
-    "cv"                              = {}
-    "daidalos"                        = {}
-    "devbox-setup"                    = {}
+    "cv"       = {}
+    "daidalos" = {}
+    "devbox-setup" = {
+      actions_enabled = true
+      ci_gated        = true
+    }
     "drive"                           = {}
     "fpf-to-obsidian-vault-converter" = {}
     "gh-repo-settings" = {
       visibility  = "public"
       description = "Unified GitHub repository and organisation settings for abrosimov and abrosimov-tech, managed with OpenTofu"
+      ci_gated    = true
     }
-    "go-core"                 = {}
-    "go-devtools"             = {}
-    "go-kdl2"                 = {}
-    "go-provider"             = {}
-    "grpcApp"                 = {}
-    "kadmos"                  = {}
-    "llm-orchestrator"        = {}
-    "llm-tools-configuration" = {}
+    "go-core"          = {}
+    "go-devtools"      = {}
+    "go-kdl2"          = {}
+    "go-provider"      = {}
+    "grpcApp"          = {}
+    "kadmos"           = {}
+    "llm-orchestrator" = {}
+    "llm-tools-configuration" = {
+      actions_enabled = true
+    }
     "ncp_database"            = {}
     "nomos"                   = {}
     "obsidian-content-plugin" = {}
@@ -78,19 +88,27 @@ locals {
       visibility  = "private"
       description = "Personal finance system: budgeting and tracking of equity and assets"
     }
-    "pinax"           = {}
-    "politeia"        = {}
-    "proj"            = {}
-    "py-core"         = {}
-    "renovate-config" = {}
-    "repo-template" = {
-      visibility  = "public"
-      description = "Starting point for new repositories: pinned Renovate preset, CI with the required check, Apache-2.0"
-      topics      = ["actions-enabled"]
-      is_template = true
-      template    = null
+    "pinax"    = {}
+    "politeia" = {}
+    "proj" = {
+      actions_enabled = true
     }
-    "setup_lab"                 = {}
+    "py-core" = {}
+    "renovate-config" = {
+      actions_enabled = true
+      ci_gated        = true
+    }
+    "repo-template" = {
+      visibility      = "public"
+      description     = "Starting point for new repositories: pinned Renovate preset, CI with the required check, Apache-2.0"
+      is_template     = true
+      template        = null
+      actions_enabled = true
+      ci_gated        = true
+    }
+    "setup_lab" = {
+      actions_enabled = true
+    }
     "tamias"                    = {}
     "vddl"                      = {}
     "warp-and-weft"             = {}
@@ -112,7 +130,8 @@ locals {
   undeclared_repositories = setsubtract(keys(local.discovered_repositories), keys(local.declared_repositories))
   repositories_to_create  = setsubtract(keys(local.declared_repositories), keys(local.discovered_repositories))
 
-  # What GitHub reports wins over the declaration once the repository exists.
+  # What GitHub reports wins over the declared presentation once the
+  # repository exists; the declared policy always wins.
   repositories = {
     for name, repo in local.declared_repositories : name => merge(
       contains(local.repositories_to_create, name) ? {
@@ -122,8 +141,10 @@ locals {
         default_branch = null
       } : local.discovered_repositories[name],
       {
-        is_template = try(repo.is_template, false)
-        template    = contains(local.repositories_to_create, name) ? try(repo.template, local.repository_template) : null
+        is_template     = try(repo.is_template, false)
+        template        = contains(local.repositories_to_create, name) ? try(repo.template, local.repository_template) : null
+        actions_enabled = try(repo.actions_enabled, local.actions_enabled)
+        ci_gated        = try(repo.ci_gated, false)
       },
     )
   }
@@ -157,7 +178,8 @@ module "repo" {
   is_template    = each.value.is_template
   template       = each.value.template
 
-  actions_enabled      = local.actions_enabled
+  actions_enabled      = each.value.actions_enabled
+  ci_gated             = each.value.ci_gated
   actions_required     = each.key == local.delivery_repository
   sha_pinning_required = local.enforce_sha_pinning
 }

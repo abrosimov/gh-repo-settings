@@ -1,6 +1,6 @@
 locals {
   is_public  = var.visibility == "public"
-  is_ci_gate = contains(var.topics, var.ci_gate_topic)
+  is_ci_gate = var.ci_gated
 }
 
 # Policy only. Identity and presentation — description, topics, visibility,

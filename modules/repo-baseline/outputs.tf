@@ -1,5 +1,5 @@
 output "actions_enabled" {
-  description = "Whether GitHub Actions runs in the repository, after the topic overrides."
+  description = "Whether GitHub Actions runs in the repository, after actions_required."
   value       = local.actions_enabled
 }
 

@@ -11,7 +11,7 @@ Every repository gets the same policy from [`modules/repo-baseline`](modules/rep
 |---|---|
 | Merging | merge commit and squash allowed, rebase off; auto-merge on; head branch deleted after merge |
 | Ruleset `baseline` on the default branch | no deletion, no force-push, signed commits required, pull request required with zero approvals, merge or squash only; the admin role bypasses it |
-| CI gate | on repositories with the topic `ci-gated`, the check `required` from GitHub Actions must pass (not required to be up to date with the base) |
+| CI gate | on repositories declared with `ci_gated = true`, the check `required` from GitHub Actions must pass (not required to be up to date with the base) |
 | Actions | on or off per owner or per repository (see below); all actions allowed; pinning to a full commit SHA enforced once every workflow is pinned (`enforce_sha_pinning` in the stack); `GITHUB_TOKEN` read-only by default and unable to approve pull requests |
 | Security | Dependabot alerts on (Renovate reads them), Dependabot security pull requests off (Renovate raises them); secret scanning and push protection on public repositories |
 
@@ -38,9 +38,9 @@ aside. Add an entry with a visibility and merge:
 
 ```hcl
 "new-service" = {
-  visibility  = "private"
-  description = "What it is for"
-  topics      = ["actions-enabled"] # optional
+  visibility      = "private"
+  description     = "What it is for"
+  actions_enabled = true # optional
 }
 ```
 
@@ -49,8 +49,10 @@ In `abrosimov` it is generated from `repo-template`: a pinned Renovate preset, C
 `template = null` for an empty repository with an initial commit instead; `abrosimov-tech` has no
 template yet. Later changes to the template never reach repositories already generated from it.
 
-Visibility, description, topics and `is_template` are set at creation only; later edits happen on
-GitHub, which is why an existing repository's entry is empty (`"cv" = {}`).
+Visibility, description, topics and `is_template` are presentation, set at creation only; later
+edits happen on GitHub, which is why most existing entries are empty (`"cv" = {}`). The policy
+switches `actions_enabled` and `ci_gated` live in the entry and apply on every plan: they are
+changed here, never on GitHub.
 
 The list and GitHub must agree. A repository created by hand on GitHub stops every plan until it has
 an entry — the plan names it — and the daily scheduled plan on `master` fails until then, which
@@ -141,21 +143,21 @@ there.
    The workflow must run on every pull request: a `paths:` filter leaves pull requests outside
    those paths without the check, and they never merge.
 
-2. Once it is on the default branch, add the topic `ci-gated` to the repository and apply.
+2. Once it is on the default branch, set `ci_gated = true` in the repository's entry and apply.
 
-Adding the topic first blocks every merge, because the required check never reports.
+Setting it first blocks every merge, because the required check never reports.
 
 ## Switching GitHub Actions on or off
 
 - **Every repository of an owner:** set `actions_enabled` in `stacks/<owner>/repositories.tf` and
   apply.
-- **One repository:** add the topic `actions-disabled` or `actions-enabled` to it and apply. The
-  topic wins over the stack-wide switch; with both topics present, Actions is off.
+- **One repository:** set `actions_enabled = true` or `false` in its entry and apply. The entry
+  wins over the stack-wide switch.
 
-A `ci-gated` repository cannot have Actions off: the plan stops, because the required check would
+A `ci_gated` repository cannot have Actions off: the plan stops, because the required check would
 never report and every merge would block.
 
-`gh-repo-settings` keeps Actions on whatever the switch and its topics say: its own CI applies this
+`gh-repo-settings` keeps Actions on whatever the switch and its entry say: its own CI applies this
 configuration, so with Actions off there only a local apply could turn them back on.
 
 ## State encryption

@@ -150,7 +150,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # The one check the baseline ruleset requires, in this repository and in
-  # every other one tagged ci-gated: it stands for all the jobs above. A job
+  # every other one declared ci_gated: it stands for all the jobs above. A job
   # skipped on purpose (plan on a push) does not fail it.
   required:
     name: required

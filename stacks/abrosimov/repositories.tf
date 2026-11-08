@@ -43,10 +43,13 @@ locals {
   #     template    = null         # optional: an empty repository instead
   #   }
   declared_repositories = {
-    "2026-june-ai-ideas-synthesis"    = {}
-    "agents-hooks-guard"              = {}
-    "aletheia"                        = {}
-    "apme"                            = {}
+    "2026-june-ai-ideas-synthesis" = {}
+    "agents-hooks-guard"           = {}
+    "aletheia"                     = {}
+    "apme"                         = {}
+    "autarkeia" = {
+      visibility = "private"
+    }
     "cv"                              = {}
     "daidalos"                        = {}
     "devbox-setup"                    = {}

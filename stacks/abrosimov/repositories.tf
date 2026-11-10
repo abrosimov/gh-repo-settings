@@ -17,11 +17,10 @@ locals {
   # Off since 2026-11-01 to save Actions minutes while the baseline settles.
   actions_enabled = false
 
-  # Off until every workflow is pinned. On 2026-10-30, 63 action references
-  # in 12 workflows still named a tag; Renovate's pinning pull requests for
-  # them wait on CI, and turning this on first would stop those workflows
-  # from starting at all.
-  enforce_sha_pinning = false
+  # On since every workflow of a repository with Actions on is pinned. A
+  # repository switched on later must have its workflows pinned first: a tag
+  # reference stops its workflow from starting at all.
+  enforce_sha_pinning = true
 
   # Every repository OpenTofu creates is generated from this template,
   # unless its entry sets template = null.

@@ -50,6 +50,9 @@ locals {
     "agents-hooks-guard"           = {}
     "aletheia"                     = {}
     "apme"                         = {}
+    "arche-go" = {
+      actions_enabled = true
+    }
     "autarkeia" = {
       visibility      = "private"
       actions_enabled = true
@@ -67,7 +70,6 @@ locals {
       description = "Unified GitHub repository and organisation settings for abrosimov and abrosimov-tech, managed with OpenTofu"
       ci_gated    = true
     }
-    "go-core"     = {}
     "go-devtools" = {}
     "go-kdl2" = {
       actions_enabled = true
@@ -208,4 +210,11 @@ import {
 
   to = module.repo[each.key].github_repository.this
   id = each.key
+}
+
+# go-core was renamed to arche-go on GitHub; its state follows the new name
+# instead of being destroyed and imported again.
+moved {
+  from = module.repo["go-core"]
+  to   = module.repo["arche-go"]
 }

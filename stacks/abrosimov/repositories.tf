@@ -110,7 +110,9 @@ locals {
     "setup_lab" = {
       actions_enabled = true
     }
-    "tamias"                    = {}
+    "tamias" = {
+      actions_enabled = true
+    }
     "vddl"                      = {}
     "warp-and-weft"             = {}
     "workbench-design-spec-tmp" = {}

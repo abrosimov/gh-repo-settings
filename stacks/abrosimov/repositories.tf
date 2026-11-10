@@ -67,9 +67,11 @@ locals {
       description = "Unified GitHub repository and organisation settings for abrosimov and abrosimov-tech, managed with OpenTofu"
       ci_gated    = true
     }
-    "go-core"          = {}
-    "go-devtools"      = {}
-    "go-kdl2"          = {}
+    "go-core"     = {}
+    "go-devtools" = {}
+    "go-kdl2" = {
+      actions_enabled = true
+    }
     "go-provider"      = {}
     "grpcApp"          = {}
     "kadmos"           = {}

@@ -91,7 +91,9 @@ locals {
       visibility  = "private"
       description = "Personal finance system: budgeting and tracking of equity and assets"
     }
-    "pinax"    = {}
+    "pinax" = {
+      actions_enabled = true
+    }
     "politeia" = {}
     "proj" = {
       actions_enabled = true

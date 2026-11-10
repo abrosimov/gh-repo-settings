@@ -1,0 +1,71 @@
+name: assign-dependency-dashboards
+
+# Renovate assigns its pull requests but has no option to assign the
+# Dependency Dashboard issue it opens, so an unassigned dashboard never shows
+# up in the owner's assigned list. This job assigns every open dashboard the
+# Renovate App created, in every repository of both owners, to abrosimov:
+# the first run catches the dashboards that already exist, and the nightly
+# run catches each new one within a day.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: assign-dependency-dashboards
+  cancel-in-progress: false
+
+jobs:
+  assign:
+    name: assign (${{ matrix.owner }})
+    runs-on: ubuntu-26.04
+    # The write tokens. The environment admits master only, which a schedule
+    # and a dispatch from master both are.
+    environment: apply
+    strategy:
+      fail-fast: false
+      matrix:
+        owner: [abrosimov, abrosimov-tech]
+    steps:
+      # Chosen in the shell rather than with `a && x || y`, which would hand
+      # one owner's token to the other whenever x is empty.
+      - name: Assign the dashboards
+        env:
+          TOKEN_ABROSIMOV: ${{ secrets.GH_TOKEN_ABROSIMOV }}
+          TOKEN_ABROSIMOV_TECH: ${{ secrets.GH_TOKEN_ABROSIMOV_TECH }}
+          OWNER: ${{ matrix.owner }}
+          ASSIGNEE: abrosimov
+          CREATOR: abrosimov-renovate[bot]
+          TITLE: Dependency Dashboard
+        run: |
+          set -euo pipefail
+          case "$OWNER" in
+            abrosimov) GH_TOKEN="$TOKEN_ABROSIMOV" ;;
+            abrosimov-tech) GH_TOKEN="$TOKEN_ABROSIMOV_TECH" ;;
+          esac
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::No token for $OWNER in the apply environment"
+            exit 1
+          fi
+          export GH_TOKEN
+
+          # Repositories are listed one by one rather than searched: the
+          # search API rejects an owner whose repositories it cannot see, and
+          # its index lags behind a newly opened issue.
+          assigned=0
+          while read -r repo; do
+            numbers="$(gh api --paginate -X GET "repos/$repo/issues" \
+              -f state=open -f creator="$CREATOR" -f per_page=100 \
+              --jq ".[] | select(.pull_request == null and .title == env.TITLE and ([.assignees[].login] | index(env.ASSIGNEE) | not)) | .number")"
+            for number in $numbers; do
+              gh issue edit "$number" -R "$repo" --add-assignee "$ASSIGNEE" >/dev/null
+              echo "Assigned $repo#$number"
+              assigned=$((assigned + 1))
+            done
+          done < <(gh repo list "$OWNER" --limit 1000 --no-archived --json nameWithOwner,hasIssuesEnabled \
+            --jq '.[] | select(.hasIssuesEnabled) | .nameWithOwner')
+
+          echo "$OWNER: assigned $assigned dashboard(s) to $ASSIGNEE" >> "$GITHUB_STEP_SUMMARY"

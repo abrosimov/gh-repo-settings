@@ -92,6 +92,7 @@ locals {
     "politeia" = {}
     "proj" = {
       actions_enabled = true
+      ci_gated        = true
     }
     "py-core" = {}
     "renovate-config" = {

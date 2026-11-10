@@ -71,6 +71,7 @@ locals {
     "go-devtools" = {}
     "go-kdl2" = {
       actions_enabled = true
+      ci_gated        = true
     }
     "go-provider"      = {}
     "grpcApp"          = {}

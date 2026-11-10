@@ -12,7 +12,7 @@ Every repository gets the same policy from [`modules/repo-baseline`](modules/rep
 | Merging | merge commit and squash allowed, rebase off; auto-merge on; head branch deleted after merge |
 | Ruleset `baseline` on the default branch | no deletion, no force-push, signed commits required, pull request required with zero approvals, merge or squash only; the admin role bypasses it |
 | CI gate | on repositories declared with `ci_gated = true`, the check `required` from GitHub Actions must pass (not required to be up to date with the base) |
-| Actions | on or off per owner or per repository (see below); all actions allowed; pinning to a full commit SHA enforced once every workflow is pinned (`enforce_sha_pinning` in the stack); `GITHUB_TOKEN` read-only by default and unable to approve pull requests |
+| Actions | on or off per owner or per repository (see below); all actions allowed; pinning to a full commit SHA enforced (`enforce_sha_pinning` in the stack); `GITHUB_TOKEN` read-only by default and unable to approve pull requests |
 | Security | Dependabot alerts on (Renovate reads them), Dependabot security pull requests off (Renovate raises them); secret scanning and push protection on public repositories |
 
 The default branch is always `master`. Identity and presentation — name, description, topics,

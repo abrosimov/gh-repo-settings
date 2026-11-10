@@ -17,11 +17,10 @@ locals {
   # Off since 2026-11-01 to save Actions minutes while the baseline settles.
   actions_enabled = false
 
-  # Off until every workflow is pinned. On 2026-10-30, 63 action references
-  # in 12 workflows still named a tag; Renovate's pinning pull requests for
-  # them wait on CI, and turning this on first would stop those workflows
-  # from starting at all.
-  enforce_sha_pinning = false
+  # On since every workflow of a repository with Actions on is pinned. A
+  # repository switched on later must have its workflows pinned first: a tag
+  # reference stops its workflow from starting at all.
+  enforce_sha_pinning = true
 
   # Every repository OpenTofu creates is generated from this template,
   # unless its entry sets template = null.
@@ -50,6 +49,9 @@ locals {
     "agents-hooks-guard"           = {}
     "aletheia"                     = {}
     "apme"                         = {}
+    "arche-go" = {
+      actions_enabled = true
+    }
     "autarkeia" = {
       visibility      = "private"
       actions_enabled = true
@@ -67,14 +69,20 @@ locals {
       description = "Unified GitHub repository and organisation settings for abrosimov and abrosimov-tech, managed with OpenTofu"
       ci_gated    = true
     }
-    "go-core"     = {}
     "go-devtools" = {}
     "go-kdl2" = {
       actions_enabled = true
       ci_gated        = true
     }
-    "go-provider"      = {}
-    "grpcApp"          = {}
+    "go-provider" = {}
+    "grpcApp"     = {}
+    # Written to only by goreleaser in the repositories whose casks it holds,
+    # so it needs neither the template's CI and Renovate nor Actions.
+    "homebrew-tap" = {
+      visibility  = "public"
+      description = "Homebrew tap for abrosimov's command-line tools"
+      template    = null
+    }
     "kadmos"           = {}
     "llm-orchestrator" = {}
     "llm-tools-configuration" = {
@@ -201,4 +209,11 @@ import {
 
   to = module.repo[each.key].github_repository.this
   id = each.key
+}
+
+# go-core was renamed to arche-go on GitHub; its state follows the new name
+# instead of being destroyed and imported again.
+moved {
+  from = module.repo["go-core"]
+  to   = module.repo["arche-go"]
 }

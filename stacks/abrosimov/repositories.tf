@@ -73,8 +73,15 @@ locals {
       actions_enabled = true
       ci_gated        = true
     }
-    "go-provider"      = {}
-    "grpcApp"          = {}
+    "go-provider" = {}
+    "grpcApp"     = {}
+    # Written to only by goreleaser in the repositories whose casks it holds,
+    # so it needs neither the template's CI and Renovate nor Actions.
+    "homebrew-tap" = {
+      visibility  = "public"
+      description = "Homebrew tap for abrosimov's command-line tools"
+      template    = null
+    }
     "kadmos"           = {}
     "llm-orchestrator" = {}
     "llm-tools-configuration" = {

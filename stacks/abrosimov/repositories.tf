@@ -88,8 +88,11 @@ locals {
     "llm-tools-configuration" = {
       actions_enabled = true
     }
-    "ncp_database"            = {}
-    "nomos"                   = {}
+    "ncp_database" = {}
+    "nomos" = {
+      actions_enabled = true
+      ci_gated        = true
+    }
     "obsidian-content-plugin" = {}
     "obsidian-notes"          = {}
     "obsidian-tasks-system"   = {}

@@ -86,16 +86,6 @@ Secrets live in two environments of this repository and are set with `gh secret 
 from forks. The environments themselves are managed in `stacks/abrosimov/delivery.tf`; their secret
 values never pass through OpenTofu.
 
-## Dependency Dashboard assignment
-
-Renovate assigns its pull requests but has no option to assign the Dependency Dashboard issue it
-opens. `.github/workflows/assign-dependency-dashboards.yml` does it instead: nightly, and on
-demand with `gh workflow run assign-dependency-dashboards.yml`, it walks every non-archived
-repository of both owners and assigns each open `Dependency Dashboard` issue created by
-`abrosimov-renovate[bot]` to `abrosimov`, unless it already is. A new dashboard is therefore assigned
-within a day. The job uses the `apply` tokens, which for this need **Issues: read and write** on
-every repository of their owner in addition to what the apply needs.
-
 ## State
 
 The state of each stack is a file on the `tofu-state` branch: `abrosimov.tfstate`,

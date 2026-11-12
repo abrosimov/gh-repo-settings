@@ -96,8 +96,10 @@ locals {
     "obsidian-content-plugin" = {}
     "obsidian-notes"          = {}
     "obsidian-tasks-system"   = {}
-    "otelcol-otelbox"         = {}
-    "personal-iwe-template"   = {}
+    "otelcol-otelbox" = {
+      actions_enabled = true
+    }
+    "personal-iwe-template" = {}
     "pfs" = {
       visibility  = "private"
       description = "Personal finance system: budgeting and tracking of equity and assets"

@@ -43,6 +43,7 @@ locals {
   #     template        = null      # optional: an empty repository instead
   #     actions_enabled = true      # optional: overrides the stack-wide switch
   #     ci_gated        = true      # optional: requires the check required
+  #     actions_bypass  = true      # optional: its workflows may push to master
   #   }
   declared_repositories = {
     "2026-june-ai-ideas-synthesis" = {}
@@ -85,8 +86,12 @@ locals {
     }
     "kadmos"           = {}
     "llm-orchestrator" = {}
+    # Its ledger workflows append machine-written snapshots to master and
+    # commit them with [skip ci], so a pull request would wait on checks that
+    # never report.
     "llm-tools-configuration" = {
       actions_enabled = true
+      actions_bypass  = true
     }
     "ncp_database" = {}
     "nomos" = {
@@ -166,6 +171,7 @@ locals {
         template        = contains(local.repositories_to_create, name) ? try(repo.template, local.repository_template) : null
         actions_enabled = try(repo.actions_enabled, local.actions_enabled)
         ci_gated        = try(repo.ci_gated, false)
+        actions_bypass  = try(repo.actions_bypass, false)
       },
     )
   }
@@ -201,6 +207,7 @@ module "repo" {
 
   actions_enabled      = each.value.actions_enabled
   ci_gated             = each.value.ci_gated
+  actions_bypass       = each.value.actions_bypass
   actions_required     = each.key == local.delivery_repository
   sha_pinning_required = local.enforce_sha_pinning
 }

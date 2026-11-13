@@ -28,6 +28,16 @@ resource "github_repository_ruleset" "baseline" {
     bypass_mode = "always"
   }
 
+  dynamic "bypass_actors" {
+    for_each = var.actions_bypass ? [1] : []
+
+    content {
+      actor_id    = local.github_actions_integration_id
+      actor_type  = "Integration"
+      bypass_mode = "always"
+    }
+  }
+
   lifecycle {
     precondition {
       condition     = !(local.is_ci_gate && !local.actions_enabled)

@@ -70,6 +70,12 @@ variable "actions_required" {
   default     = false
 }
 
+variable "actions_bypass" {
+  description = "Whether the GitHub Actions app bypasses the baseline ruleset on the default branch. For a repository whose own workflows commit to it — an append-only ledger, a generated index — where a pull request and its CI run per machine commit buys nothing. A bypass is whole and per ruleset: it exempts every workflow of the repository from every rule here, on every path, and another ruleset on the same branch needs its own."
+  type        = bool
+  default     = false
+}
+
 variable "sha_pinning_required" {
   description = "Whether to require every action and reusable workflow to be pinned to a full commit SHA. A workflow with a tag reference stops starting once this is on. False leaves the repository's current setting untouched rather than turning it off."
   type        = bool

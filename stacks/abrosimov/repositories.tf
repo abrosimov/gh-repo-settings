@@ -59,6 +59,7 @@ locals {
     "cv" = {}
     "daidalos" = {
       actions_enabled = true
+      ci_gated        = true
     }
     "devbox-setup" = {
       actions_enabled = true

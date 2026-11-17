@@ -56,8 +56,10 @@ locals {
       visibility      = "private"
       actions_enabled = true
     }
-    "cv"       = {}
-    "daidalos" = {}
+    "cv" = {}
+    "daidalos" = {
+      actions_enabled = true
+    }
     "devbox-setup" = {
       actions_enabled = true
       ci_gated        = true

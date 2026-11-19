@@ -10,8 +10,8 @@ Every repository gets the same policy from [`modules/repo-baseline`](modules/rep
 | Area | Setting |
 |---|---|
 | Merging | merge commit and squash allowed, rebase off; auto-merge on; head branch deleted after merge |
-| Ruleset `baseline` on the default branch | no deletion, no force-push, signed commits required, pull request required with zero approvals, merge or squash only; the admin role bypasses it |
-| CI gate | on repositories declared with `ci_gated = true`, the check `required` from GitHub Actions must pass (not required to be up to date with the base) |
+| Ruleset `baseline` on the default branch | no deletion, no force-push, signed commits required, pull request required with zero approvals, merge or squash only; the admin role bypasses it only when merging a pull request, never by pushing. It is the only ruleset on a default branch |
+| CI gate | on every repository with Actions on, unless its entry declares `ci_gated = false`, the check `required` from GitHub Actions must pass (`required_checks` names others for a repository whose CI does not expose it yet); not required to be up to date with the base |
 | Actions | on or off per owner or per repository (see below); all actions allowed; pinning to a full commit SHA enforced (`enforce_sha_pinning` in the stack); `GITHUB_TOKEN` read-only by default and unable to approve pull requests |
 | Security | Dependabot alerts on (Renovate reads them), Dependabot security pull requests off (Renovate raises them); secret scanning and push protection on public repositories |
 
@@ -143,9 +143,12 @@ there.
    The workflow must run on every pull request: a `paths:` filter leaves pull requests outside
    those paths without the check, and they never merge.
 
-2. Once it is on the default branch, set `ci_gated = true` in the repository's entry and apply.
+2. Once it is on the default branch, the repository is gated as soon as Actions are on for it.
+   Until then, its entry declares `ci_gated = false`, or `required_checks` with the jobs its CI
+   does report.
 
-Setting it first blocks every merge, because the required check never reports.
+Gating a repository whose CI does not report the checks blocks every merge, because they never
+report.
 
 ## Switching GitHub Actions on or off
 

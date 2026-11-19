@@ -37,7 +37,8 @@ locals {
   #     topics          = ["go"]    # optional
   #     is_template     = false     # optional
   #     actions_enabled = true      # optional: overrides the stack-wide switch
-  #     ci_gated        = true      # optional: requires the check required
+  #     ci_gated        = false     # optional: gated by default once Actions are on
+  #     required_checks = ["CI"]    # optional: until the CI exposes required
   #   }
   declared_repositories = {}
 
@@ -70,7 +71,9 @@ locals {
         is_template     = try(repo.is_template, false)
         template        = contains(local.repositories_to_create, name) ? try(repo.template, local.repository_template) : null
         actions_enabled = try(repo.actions_enabled, local.actions_enabled)
-        ci_gated        = try(repo.ci_gated, false)
+        # A repository with Actions on is gated unless it says otherwise.
+        ci_gated        = try(repo.ci_gated, repo.actions_enabled, local.actions_enabled)
+        required_checks = try(repo.required_checks, ["required"])
       },
     )
   }
@@ -106,6 +109,7 @@ module "repo" {
 
   actions_enabled = each.value.actions_enabled
   ci_gated        = each.value.ci_gated
+  required_checks = each.value.required_checks
 }
 
 # Adopts each declared repository that already exists; a no-op for those

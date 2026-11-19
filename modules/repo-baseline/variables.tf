@@ -53,7 +53,7 @@ variable "topics" {
 }
 
 variable "ci_gated" {
-  description = "Whether the aggregator check is required on the default branch. Set it only once the repository's CI exposes that check, otherwise every merge blocks."
+  description = "Whether required_checks must pass on the default branch. The stacks default it to whether Actions are on; a repository whose CI does not expose the checks yet must declare false, otherwise every merge blocks."
   type        = bool
   default     = false
 }
@@ -76,8 +76,13 @@ variable "sha_pinning_required" {
   default     = true
 }
 
-variable "required_check" {
-  description = "Name of the aggregator job every gated repository's CI exposes."
-  type        = string
-  default     = "required"
+variable "required_checks" {
+  description = "GitHub Actions jobs that must pass on a gated repository. The aggregator job required is the convention; another list is for a repository whose CI does not expose it yet."
+  type        = list(string)
+  default     = ["required"]
+
+  validation {
+    condition     = length(var.required_checks) > 0
+    error_message = "required_checks must name at least one job: an empty list would gate on nothing."
+  }
 }

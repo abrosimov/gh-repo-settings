@@ -42,15 +42,22 @@ locals {
   #     is_template     = false     # optional
   #     template        = null      # optional: an empty repository instead
   #     actions_enabled = true      # optional: overrides the stack-wide switch
-  #     ci_gated        = true      # optional: requires the check required
+  #     ci_gated        = false     # optional: gated by default once Actions are on
+  #     required_checks = ["CI"]    # optional: until the CI exposes required
   #   }
   declared_repositories = {
     "2026-june-ai-ideas-synthesis" = {}
-    "agents-hooks-guard"           = {}
-    "aletheia"                     = {}
-    "apme"                         = {}
+    # required_checks below carries the checks a repository's own ruleset
+    # required before the baseline became the only one; each goes once its
+    # CI exposes required. They take effect only while Actions are on.
+    "agents-hooks-guard" = {
+      required_checks = ["CI"]
+    }
+    "aletheia" = {}
+    "apme"     = {}
     "arche-go" = {
       actions_enabled = true
+      required_checks = ["lint + test", "coverage"]
     }
     "autarkeia" = {
       visibility      = "private"
@@ -65,8 +72,10 @@ locals {
       actions_enabled = true
       ci_gated        = true
     }
-    "drive"                           = {}
-    "fpf-to-obsidian-vault-converter" = {}
+    "drive" = {}
+    "fpf-to-obsidian-vault-converter" = {
+      required_checks = ["Lint, types, tests", "vaultcheck"]
+    }
     "gh-repo-settings" = {
       visibility  = "public"
       description = "Unified GitHub repository and organisation settings for abrosimov and abrosimov-tech, managed with OpenTofu"
@@ -90,6 +99,7 @@ locals {
     "llm-orchestrator" = {}
     "llm-tools-configuration" = {
       actions_enabled = true
+      required_checks = ["required", "inspect"]
     }
     "ncp_database" = {}
     "nomos" = {
@@ -99,10 +109,14 @@ locals {
     "obsidian-content-plugin" = {}
     "obsidian-notes"          = {}
     "obsidian-tasks-system"   = {}
+    # No aggregator job and no single check that covers the CI.
     "otelcol-otelbox" = {
       actions_enabled = true
+      ci_gated        = false
     }
-    "personal-iwe-template" = {}
+    "personal-iwe-template" = {
+      required_checks = ["Validate vault scaffold"]
+    }
     "pfs" = {
       visibility  = "private"
       description = "Personal finance system: budgeting and tracking of equity and assets"
@@ -110,7 +124,9 @@ locals {
     "pinax" = {
       actions_enabled = true
     }
-    "politeia" = {}
+    "politeia" = {
+      required_checks = ["Format, lint, and test"]
+    }
     "proj" = {
       actions_enabled = true
       ci_gated        = true
@@ -130,12 +146,29 @@ locals {
     }
     "setup_lab" = {
       actions_enabled = true
+      required_checks = ["CI gate"]
     }
+    # No aggregator job and no single check that covers the CI.
     "tamias" = {
       actions_enabled = true
+      ci_gated        = false
     }
-    "vddl"                      = {}
-    "warp-and-weft"             = {}
+    "vddl" = {
+      required_checks = [
+        "Generate Code",
+        "Lint Go",
+        "Lint Frontend",
+        "Lint Python",
+        "Lint Proto",
+        "Test Go",
+        "Test Frontend",
+        "Test Python",
+        "E2E Tests",
+      ]
+    }
+    "warp-and-weft" = {
+      required_checks = ["vault-check"]
+    }
     "workbench-design-spec-tmp" = {}
   }
 
@@ -168,7 +201,9 @@ locals {
         is_template     = try(repo.is_template, false)
         template        = contains(local.repositories_to_create, name) ? try(repo.template, local.repository_template) : null
         actions_enabled = try(repo.actions_enabled, local.actions_enabled)
-        ci_gated        = try(repo.ci_gated, false)
+        # A repository with Actions on is gated unless it says otherwise.
+        ci_gated        = try(repo.ci_gated, repo.actions_enabled, local.actions_enabled)
+        required_checks = try(repo.required_checks, ["required"])
       },
     )
   }
@@ -204,6 +239,7 @@ module "repo" {
 
   actions_enabled      = each.value.actions_enabled
   ci_gated             = each.value.ci_gated
+  required_checks      = each.value.required_checks
   actions_required     = each.key == local.delivery_repository
   sha_pinning_required = local.enforce_sha_pinning
 }

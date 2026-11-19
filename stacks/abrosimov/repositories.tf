@@ -109,6 +109,7 @@ locals {
     }
     "pinax" = {
       actions_enabled = true
+      ci_gated        = true
     }
     "politeia" = {}
     "proj" = {

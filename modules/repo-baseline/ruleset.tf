@@ -20,12 +20,15 @@ resource "github_repository_ruleset" "baseline" {
     }
   }
 
-  # The owner pushes straight to the default branch; the rules bind bots and
-  # pull requests. "always" rather than "pull_request" keeps that practice.
+  # The owner may merge a pull request past the rules (unsigned commits, a
+  # red check) but cannot push to the default branch directly, so every
+  # change reaches it through a pull request and its CI. This is the only
+  # ruleset on a default branch: a second one would narrow the merge methods
+  # or drop the bypass behind the baseline's back.
   bypass_actors {
     actor_id    = local.admin_repository_role_id
     actor_type  = "RepositoryRole"
-    bypass_mode = "always"
+    bypass_mode = "pull_request"
   }
 
   lifecycle {
@@ -51,9 +54,13 @@ resource "github_repository_ruleset" "baseline" {
       for_each = local.is_ci_gate ? [1] : []
 
       content {
-        required_check {
-          context        = var.required_check
-          integration_id = local.github_actions_integration_id
+        dynamic "required_check" {
+          for_each = var.required_checks
+
+          content {
+            context        = required_check.value
+            integration_id = local.github_actions_integration_id
+          }
         }
 
         # Off: with it on, every merge leaves each other open pull request

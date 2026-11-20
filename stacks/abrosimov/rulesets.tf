@@ -1,16 +1,35 @@
-# Rulesets a repository has beyond the baseline's.
+# The baseline is the only ruleset on a default branch. These are the
+# rulesets that were created by hand on GitHub before it, adopted here only
+# to be switched off: each narrowed the baseline (merge commits only, no
+# bypass for unsigned commits, linear history, force-push forbidden on every
+# branch) or required checks that required_checks in repositories.tf now
+# carries. OpenTofu can delete a ruleset only once it is in the state, so
+# they are disabled first and deleted by removing them from this map.
+locals {
+  retired_rulesets = {
+    "agents-hooks-guard:24428572"              = "protect default branch"
+    "arche-go:20180672"                        = "protect master"
+    "devbox-setup:18532781"                    = "No force-push"
+    "fpf-to-obsidian-vault-converter:24428577" = "protect default branch"
+    "go-kdl2:24428579"                         = "protect default branch"
+    "llm-tools-configuration:24413193"         = "master protection"
+    "nomos:20182108"                           = "protect master"
+    "personal-iwe-template:24428580"           = "protect default branch"
+    "politeia:24428583"                        = "protect default branch"
+    "setup_lab:23721745"                       = "master history safety"
+    "setup_lab:23721747"                       = "master CI admission"
+    "vddl:24428591"                            = "protect default branch"
+    "warp-and-weft:24428593"                   = "protect default branch"
+  }
+}
 
-# go-kdl2's ruleset from before the baseline, created by hand on GitHub and
-# adopted here as it stands. Every rule in it is also enforced by the
-# baseline ruleset, or by a stricter one: GitHub applies every active ruleset,
-# so the baseline's merge methods leave rebase out regardless, and the
-# baseline's check required needs the job "Build, lint, test" in go-kdl2's CI.
-# Dropping this resource deletes the ruleset without loosening the branch.
-resource "github_repository_ruleset" "go_kdl2_protect_default_branch" {
-  name        = "protect default branch"
-  repository  = "go-kdl2"
+resource "github_repository_ruleset" "retired" {
+  for_each = local.retired_rulesets
+
+  name        = each.value
+  repository  = split(":", each.key)[0]
   target      = "branch"
-  enforcement = "active"
+  enforcement = "disabled"
 
   conditions {
     ref_name {
@@ -19,88 +38,26 @@ resource "github_repository_ruleset" "go_kdl2_protect_default_branch" {
     }
   }
 
-  bypass_actors {
-    actor_id    = 5
-    actor_type  = "RepositoryRole"
-    bypass_mode = "always"
-  }
-
   rules {
-    deletion         = true
-    non_fast_forward = true
-
-    pull_request {
-      required_approving_review_count = 0
-      allowed_merge_methods           = ["merge", "squash", "rebase"]
-    }
-
-    required_status_checks {
-      required_check {
-        context        = "Build, lint, test"
-        integration_id = 15368
-      }
-
-      strict_required_status_checks_policy = false
-    }
+    deletion = true
   }
 
   depends_on = [module.repo]
 }
 
 import {
-  to = github_repository_ruleset.go_kdl2_protect_default_branch
-  id = "go-kdl2:24428579"
+  for_each = local.retired_rulesets
+
+  to = github_repository_ruleset.retired[each.key]
+  id = each.key
 }
 
-# setup_lab's ruleset that requires its "CI gate" check, created by hand on
-# GitHub and adopted here. The owner's bypass is limited to pull requests: a
-# direct push to master no longer skips CI, while merging a pull request past
-# a red gate stays possible as an explicit bypass. The baseline and the
-# hand-made "master history safety" rulesets keep their "always" bypass; this
-# ruleset alone blocks the direct push, because GitHub applies every active
-# ruleset.
-resource "github_repository_ruleset" "setup_lab_master_ci_admission" {
-  name        = "master CI admission"
-  repository  = "setup_lab"
-  target      = "branch"
-  enforcement = "active"
-
-  conditions {
-    ref_name {
-      include = ["~DEFAULT_BRANCH"]
-      exclude = []
-    }
-  }
-
-  bypass_actors {
-    actor_id    = 33803
-    actor_type  = "User"
-    bypass_mode = "pull_request"
-  }
-
-  rules {
-    non_fast_forward    = true
-    required_signatures = true
-
-    pull_request {
-      required_approving_review_count = 0
-      allowed_merge_methods           = ["merge", "squash", "rebase"]
-    }
-
-    required_status_checks {
-      required_check {
-        context        = "CI gate"
-        integration_id = 15368
-      }
-
-      strict_required_status_checks_policy = false
-    }
-  }
-
-  depends_on = [module.repo]
+moved {
+  from = github_repository_ruleset.go_kdl2_protect_default_branch
+  to   = github_repository_ruleset.retired["go-kdl2:24428579"]
 }
 
-import {
-  to = github_repository_ruleset.setup_lab_master_ci_admission
-  id = "setup_lab:23721747"
+moved {
+  from = github_repository_ruleset.setup_lab_master_ci_admission
+  to   = github_repository_ruleset.retired["setup_lab:23721747"]
 }

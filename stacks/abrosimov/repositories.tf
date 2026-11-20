@@ -123,6 +123,7 @@ locals {
     }
     "pinax" = {
       actions_enabled = true
+      ci_gated        = true
     }
     "politeia" = {
       required_checks = ["Format, lint, and test"]

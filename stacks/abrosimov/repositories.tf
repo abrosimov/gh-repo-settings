@@ -46,6 +46,13 @@ locals {
   #     required_checks = ["CI"]    # optional: until the CI exposes required
   #   }
   declared_repositories = {
+    # GitHub reads default community health files only from a public .github.
+    ".github" = {
+      visibility      = "public"
+      description     = "Default issue and pull request templates and community health files for every repository of abrosimov"
+      actions_enabled = true
+      ci_gated        = true
+    }
     "2026-june-ai-ideas-synthesis" = {}
     # required_checks below carries the checks a repository's own ruleset
     # required before the baseline became the only one; each goes once its

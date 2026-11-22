@@ -407,6 +407,82 @@ func TestRepositoriesFailures(t *testing.T) {
 	}
 }
 
+func TestRepositoriesCollapsesIdenticalGraphQLErrors(t *testing.T) {
+	type graphQLErrorJSON struct {
+		Type    string `json:"type,omitempty"`
+		Message string `json:"message"`
+	}
+	repeat := func(e graphQLErrorJSON, n int) []graphQLErrorJSON {
+		return slices.Repeat([]graphQLErrorJSON{e}, n)
+	}
+	cases := []struct {
+		name   string
+		errors []graphQLErrorJSON
+		want   string
+	}{
+		{
+			name:   "the same message many times",
+			errors: repeat(graphQLErrorJSON{Message: "Something went wrong"}, 68),
+			want:   "Something went wrong (68 times)",
+		},
+		{
+			name:   "the same message twice",
+			errors: repeat(graphQLErrorJSON{Message: "Something went wrong"}, 2),
+			want:   "Something went wrong (2 times)",
+		},
+		{
+			name:   "single message has no suffix",
+			errors: []graphQLErrorJSON{{Message: "only once"}},
+			want:   "only once",
+		},
+		{
+			name: "different messages keep first-seen order and count only the repeated one",
+			errors: []graphQLErrorJSON{
+				{Message: "second alphabetically"}, {Message: "first alphabetically"}, {Message: "second alphabetically"},
+			},
+			want: "second alphabetically (2 times); first alphabetically",
+		},
+		{
+			name: "repeated message interleaved with others stays at its first position",
+			errors: []graphQLErrorJSON{
+				{Message: "a"}, {Message: "b"}, {Message: "a"}, {Message: "c"}, {Message: "b"}, {Message: "a"},
+			},
+			want: "a (3 times); b (2 times); c",
+		},
+		{
+			name:   "the same message with and without a type are different",
+			errors: []graphQLErrorJSON{{Type: "NOT_FOUND", Message: "gone"}, {Message: "gone"}},
+			want:   "NOT_FOUND: gone; gone",
+		},
+		{
+			name:   "typed duplicates collapse with the type kept",
+			errors: append(repeat(graphQLErrorJSON{Type: "NOT_FOUND", Message: "gone"}, 3), graphQLErrorJSON{Message: "gone"}),
+			want:   "NOT_FOUND: gone (3 times); gone",
+		},
+		{
+			name:   "the same message under different types is different",
+			errors: []graphQLErrorJSON{{Type: "A", Message: "m"}, {Type: "B", Message: "m"}},
+			want:   "A: m; B: m",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := marshal(t, map[string]any{"data": nil, "errors": tc.errors})
+			client, _ := newFakeGitHub(t, serveBody(http.StatusOK, body))
+
+			_, err := listRepositories(t, client)
+
+			if !errors.Is(err, conformance.ErrGitHubQuery) {
+				t.Fatalf("err = %v, want %v", err, conformance.ErrGitHubQuery)
+			}
+			want := "listing repositories of " + testOwner + ": " + conformance.ErrGitHubQuery.Error() + ": " + tc.want
+			if err.Error() != want {
+				t.Errorf("err = %q, want %q", err, want)
+			}
+		})
+	}
+}
+
 func TestRepositoriesTruncatesLongErrorBodies(t *testing.T) {
 	client, _ := newFakeGitHub(t, serveBody(http.StatusInternalServerError, strings.Repeat("x", 5000)))
 

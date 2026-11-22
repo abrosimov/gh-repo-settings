@@ -58,7 +58,9 @@ tasks:
       GITHUB_TOKEN:
         sh: printf '%s' "${GITHUB_TOKEN:-$(gh auth token)}"
     cmds:
-      - go run ./cmd/repo-conformance {{.CLI_ARGS}}
+      # Built rather than run with go run, which turns exit 2 into 1.
+      - go build -o bin/repo-conformance ./cmd/repo-conformance
+      - bin/repo-conformance {{.CLI_ARGS}}
 
   validate:
     desc: Validate every stack without touching the state

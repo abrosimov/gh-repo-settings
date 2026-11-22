@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -232,13 +233,24 @@ func toEntries(tree *treeObject) []Entry {
 }
 
 func joinErrors(errs []graphQLError) string {
-	messages := make([]string, 0, len(errs))
+	var order []string
+	counts := make(map[string]int, len(errs))
 	for i := range errs {
+		message := errs[i].Message
 		if errs[i].Type != "" {
-			messages = append(messages, errs[i].Type+": "+errs[i].Message)
-			continue
+			message = errs[i].Type + ": " + message
 		}
-		messages = append(messages, errs[i].Message)
+		if counts[message] == 0 {
+			order = append(order, message)
+		}
+		counts[message]++
+	}
+	messages := make([]string, 0, len(order))
+	for _, message := range order {
+		if counts[message] > 1 {
+			message += " (" + strconv.Itoa(counts[message]) + " times)"
+		}
+		messages = append(messages, message)
 	}
 	return strings.Join(messages, "; ")
 }

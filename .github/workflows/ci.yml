@@ -156,7 +156,11 @@ jobs:
         if: ${{ !cancelled() && matrix.stack == 'abrosimov' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN_ABROSIMOV }}
-        run: go run ./cmd/repo-conformance --owner abrosimov
+        # Built rather than run with go run, which turns every non-zero exit
+        # into 1 and so hides whether the check found drift or failed to read.
+        run: |
+          go build -o "$RUNNER_TEMP/repo-conformance" ./cmd/repo-conformance
+          "$RUNNER_TEMP/repo-conformance" --owner abrosimov
 
   # The one check the baseline ruleset requires, in this repository and in
   # every other one declared ci_gated: it stands for all the jobs above. A job

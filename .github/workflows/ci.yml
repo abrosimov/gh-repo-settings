@@ -6,7 +6,8 @@ on:
   pull_request:
     branches: [master]
   # A daily plan of master: a repository created on GitHub but not declared,
-  # or a broken token, fails it, and GitHub mails the failure.
+  # a repository that drifts from the licence or community health policy, or
+  # a broken token, fails it, and GitHub mails the failure.
   schedule:
     - cron: "41 5 * * *"
 
@@ -148,6 +149,14 @@ jobs:
             tofu -chdir="$STACK" show -no-color tfplan
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # The licence and community health files are repository content, which
+      # OpenTofu does not manage. Runs after a failed plan too, so both show.
+      - name: Check repository conformance
+        if: ${{ !cancelled() && matrix.stack == 'abrosimov' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN_ABROSIMOV }}
+        run: go run ./cmd/repo-conformance --owner abrosimov
 
   # The one check the baseline ruleset requires, in this repository and in
   # every other one declared ci_gated: it stands for all the jobs above. A job

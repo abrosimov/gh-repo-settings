@@ -52,6 +52,14 @@ tasks:
       - GOBIN="$PWD/bin" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{.GOLANGCI_LINT_VERSION}}
       - bin/golangci-lint run ./...
 
+  conformance:
+    desc: Fail when a repository of abrosimov is not Apache-2.0 or overrides the default community health files
+    env:
+      GITHUB_TOKEN:
+        sh: printf '%s' "${GITHUB_TOKEN:-$(gh auth token)}"
+    cmds:
+      - go run ./cmd/repo-conformance {{.CLI_ARGS}}
+
   validate:
     desc: Validate every stack without touching the state
     cmds:

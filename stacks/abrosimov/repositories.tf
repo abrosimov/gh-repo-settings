@@ -109,10 +109,8 @@ locals {
     "obsidian-content-plugin" = {}
     "obsidian-notes"          = {}
     "obsidian-tasks-system"   = {}
-    # No aggregator job and no single check that covers the CI.
     "otelcol-otelbox" = {
       actions_enabled = true
-      ci_gated        = false
     }
     "personal-iwe-template" = {
       required_checks = ["Validate vault scaffold"]
@@ -149,10 +147,8 @@ locals {
       actions_enabled = true
       required_checks = ["CI gate"]
     }
-    # No aggregator job and no single check that covers the CI.
     "tamias" = {
       actions_enabled = true
-      ci_gated        = false
     }
     "vddl" = {
       required_checks = [

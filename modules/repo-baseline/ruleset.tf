@@ -31,6 +31,18 @@ resource "github_repository_ruleset" "baseline" {
     bypass_mode = "pull_request"
   }
 
+  # A workflow that must commit to the default branch after a release, such
+  # as one rewriting a checksum that cannot exist before the release does.
+  dynamic "bypass_actors" {
+    for_each = var.actions_push_bypass ? [local.github_actions_integration_id] : []
+
+    content {
+      actor_id    = bypass_actors.value
+      actor_type  = "Integration"
+      bypass_mode = "always"
+    }
+  }
+
   lifecycle {
     precondition {
       condition     = !(local.is_ci_gate && !local.actions_enabled)

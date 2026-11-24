@@ -58,6 +58,12 @@ variable "ci_gated" {
   default     = false
 }
 
+variable "actions_push_bypass" {
+  description = "Whether the repository's own workflows may push to the default branch past the baseline. Every workflow there reaches the branch through a reviewed pull request first, so this trusts them with what they do after a merge."
+  type        = bool
+  default     = false
+}
+
 variable "actions_enabled" {
   description = "Whether GitHub Actions is on: the repository's own declaration, or the stack-wide switch when it declares none."
   type        = bool

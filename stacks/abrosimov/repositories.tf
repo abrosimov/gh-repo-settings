@@ -51,7 +51,6 @@ locals {
       visibility      = "public"
       description     = "Default issue and pull request templates and community health files for every repository of abrosimov"
       actions_enabled = true
-      ci_gated        = true
     }
     "2026-june-ai-ideas-synthesis" = {}
     # required_checks below carries the checks a repository's own ruleset
@@ -73,16 +72,16 @@ locals {
     "cv" = {}
     "daidalos" = {
       actions_enabled = true
-      ci_gated        = true
     }
     "devbox-setup" = {
       actions_enabled = true
-      ci_gated        = true
     }
     "drive" = {}
     "fpf-to-obsidian-vault-converter" = {
       required_checks = ["Lint, types, tests", "vaultcheck"]
     }
+    # Its Actions stay on whatever the stack-wide switch says (it applies this
+    # configuration), so its gate is declared rather than derived from them.
     "gh-repo-settings" = {
       visibility  = "public"
       description = "Unified GitHub repository and organisation settings for abrosimov and abrosimov-tech, managed with OpenTofu"
@@ -91,7 +90,6 @@ locals {
     "go-devtools" = {}
     "go-kdl2" = {
       actions_enabled = true
-      ci_gated        = true
     }
     "go-provider" = {}
     "grpcApp"     = {}
@@ -111,7 +109,6 @@ locals {
     "ncp_database" = {}
     "nomos" = {
       actions_enabled = true
-      ci_gated        = true
     }
     "obsidian-content-plugin" = {}
     "obsidian-notes"          = {}
@@ -128,19 +125,16 @@ locals {
     }
     "pinax" = {
       actions_enabled = true
-      ci_gated        = true
     }
     "politeia" = {
       required_checks = ["Format, lint, and test"]
     }
     "proj" = {
       actions_enabled = true
-      ci_gated        = true
     }
     "py-core" = {}
     "renovate-config" = {
       actions_enabled = true
-      ci_gated        = true
     }
     "repo-template" = {
       visibility      = "public"
@@ -148,7 +142,6 @@ locals {
       is_template     = true
       template        = null
       actions_enabled = true
-      ci_gated        = true
     }
     "setup_lab" = {
       actions_enabled = true

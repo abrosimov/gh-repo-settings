@@ -10,7 +10,7 @@ Every repository gets the same policy from [`modules/repo-baseline`](modules/rep
 | Area | Setting |
 |---|---|
 | Merging | merge commit and squash allowed, rebase off; auto-merge on; head branch deleted after merge |
-| Ruleset `baseline` on the default branch | no deletion, no force-push, signed commits required, pull request required with zero approvals, merge or squash only; the admin role bypasses it only when merging a pull request, never by pushing. It is the only ruleset on a default branch |
+| Ruleset `baseline` on the default branch | no deletion, no force-push, signed commits required, pull request required with zero approvals, merge or squash only; the admin role bypasses it only when merging a pull request, never by pushing; in a repository declaring `actions_push_bypass` its own workflows may push past it. It is the only ruleset on a default branch |
 | CI gate | on every repository with Actions on, unless its entry declares `ci_gated = false`, the check `required` from GitHub Actions must pass (`required_checks` names others for a repository whose CI does not expose it yet); not required to be up to date with the base |
 | Actions | on or off per owner or per repository (see below); all actions allowed; pinning to a full commit SHA enforced (`enforce_sha_pinning` in the stack); `GITHUB_TOKEN` read-only by default and unable to approve pull requests |
 | Security | Dependabot alerts on (Renovate reads them), Dependabot security pull requests off (Renovate raises them); secret scanning and push protection on public repositories |
@@ -27,6 +27,7 @@ visibility — are set only when OpenTofu creates a repository and never touched
   and its Actions policy.
 - `repo-template` (a repository of `abrosimov`) — the template new repositories are generated from.
 - `cmd/tofu-sshagent-key` — the key provider OpenTofu runs to encrypt and decrypt state.
+- `cmd/repo-conformance` — the check of each repository's licence and community health files.
 - `encryption/recipients.json` — the state key wrapped once per enrolled SSH key. Public by design.
 - `stacks/abrosimov/delivery.tf` — this repository's CI/CD environments and the state branch rule.
 - branch `tofu-state` — the encrypted state files.
@@ -63,6 +64,28 @@ GitHub reports by mail. Adding the entry adopts the repository on the next apply
 Every repository's default branch is `master`. A repository whose default branch has another name
 gets it renamed on the next apply. An empty repository has no branch yet, so its first push decides:
 push `master` first.
+
+## Licence and community health files
+
+OpenTofu manages settings, not the files in a repository, so `cmd/repo-conformance` checks two
+rules for every repository of `abrosimov` that is neither a fork, archived nor empty:
+
+- **Licence.** The licence GitHub detects on the repository is `Apache-2.0`.
+- **No community health overrides.** The default branch has none of `CODE_OF_CONDUCT`,
+  `CONTRIBUTING`, `SECURITY`, `SUPPORT`, `ACCESSIBILITY`, `FUNDING`, `VULNERABILITY_REPORT` or
+  `pull_request_template` (any case, any extension) and no `ISSUE_TEMPLATE`, `DISCUSSION_TEMPLATE`
+  or `PULL_REQUEST_TEMPLATE` directory in its root, `.github/` or `docs/`, so the defaults from the
+  public `abrosimov/.github` repository apply everywhere. `.github` itself is exempt from this rule,
+  not from the licence one.
+
+There are no exceptions per repository. The check prints one line per repository and broken rule
+and exits 1 when any exists, or 2 when it cannot read GitHub. The `plan` job runs it for
+`abrosimov`, so pull requests and the daily run fail on drift; locally, run `task conformance`.
+
+The check reads the REST API with the token in `GITHUB_TOKEN`, retrying a request that fails with
+502, 503, 504 or a network error. For a user the token must be that user's own, since GitHub lists
+a user's private repositories only to the user; a fine-grained token needs read access to
+Metadata and Contents.
 
 ## How changes ship
 
@@ -111,6 +134,7 @@ policy, which need the `admin:org` scope: `gh auth refresh -h github.com -s admi
 | `task state:pull`, `task state:push` | brings the state up to date; commits and pushes it after a state edit |
 | `task check` | the checks CI runs: `tofu fmt -check`, `go vet`, `go test`, golangci-lint, `tofu validate` |
 | `task fmt` | formats OpenTofu and Go sources |
+| `task conformance` | checks every repository of `abrosimov` against the [licence and community health rules](#licence-and-community-health-files) |
 | `task key:list`, `key:enroll`, `key:revoke FINGERPRINT=…`, `key:init` | state-key recipients, see [State encryption](#state-encryption) |
 
 The state has no lock shared with CI, so `task apply` refuses to start unless:

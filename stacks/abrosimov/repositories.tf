@@ -44,6 +44,7 @@ locals {
   #     actions_enabled = true      # optional: overrides the stack-wide switch
   #     ci_gated        = false     # optional: gated by default once Actions are on
   #     required_checks = ["CI"]    # optional: until the CI exposes required
+  #     actions_push_bypass = true  # optional: its workflows may push to the default branch
   #   }
   declared_repositories = {
     # GitHub reads default community health files only from a public .github.
@@ -53,17 +54,11 @@ locals {
       actions_enabled = true
     }
     "2026-june-ai-ideas-synthesis" = {}
-    # required_checks below carries the checks a repository's own ruleset
-    # required before the baseline became the only one; each goes once its
-    # CI exposes required. They take effect only while Actions are on.
-    "agents-hooks-guard" = {
-      required_checks = ["CI"]
-    }
-    "aletheia" = {}
-    "apme"     = {}
+    "agents-hooks-guard"           = {}
+    "aletheia"                     = {}
+    "apme"                         = {}
     "arche-go" = {
       actions_enabled = true
-      required_checks = ["lint + test", "coverage"]
     }
     "autarkeia" = {
       visibility      = "private"
@@ -76,12 +71,8 @@ locals {
     "devbox-setup" = {
       actions_enabled = true
     }
-    "drive" = {}
-    "fpf-to-obsidian-vault-converter" = {
-      required_checks = ["Lint, types, tests", "vaultcheck"]
-    }
-    # Its Actions stay on whatever the stack-wide switch says (it applies this
-    # configuration), so its gate is declared rather than derived from them.
+    "drive"                           = {}
+    "fpf-to-obsidian-vault-converter" = {}
     "gh-repo-settings" = {
       visibility  = "public"
       description = "Unified GitHub repository and organisation settings for abrosimov and abrosimov-tech, managed with OpenTofu"
@@ -102,6 +93,7 @@ locals {
     }
     "kadmos"           = {}
     "llm-orchestrator" = {}
+    # inspect reports from its own workflow, outside required.
     "llm-tools-configuration" = {
       actions_enabled = true
       required_checks = ["required", "inspect"]
@@ -113,12 +105,13 @@ locals {
     "obsidian-content-plugin" = {}
     "obsidian-notes"          = {}
     "obsidian-tasks-system"   = {}
+    # Its release workflow commits the Homebrew formula's checksums to the
+    # default branch once the release they describe exists.
     "otelcol-otelbox" = {
-      actions_enabled = true
+      actions_enabled     = true
+      actions_push_bypass = true
     }
-    "personal-iwe-template" = {
-      required_checks = ["Validate vault scaffold"]
-    }
+    "personal-iwe-template" = {}
     "pfs" = {
       visibility  = "private"
       description = "Personal finance system: budgeting and tracking of equity and assets"
@@ -126,9 +119,7 @@ locals {
     "pinax" = {
       actions_enabled = true
     }
-    "politeia" = {
-      required_checks = ["Format, lint, and test"]
-    }
+    "politeia" = {}
     "proj" = {
       actions_enabled = true
     }
@@ -145,27 +136,12 @@ locals {
     }
     "setup_lab" = {
       actions_enabled = true
-      required_checks = ["CI gate"]
     }
     "tamias" = {
       actions_enabled = true
     }
-    "vddl" = {
-      required_checks = [
-        "Generate Code",
-        "Lint Go",
-        "Lint Frontend",
-        "Lint Python",
-        "Lint Proto",
-        "Test Go",
-        "Test Frontend",
-        "Test Python",
-        "E2E Tests",
-      ]
-    }
-    "warp-and-weft" = {
-      required_checks = ["vault-check"]
-    }
+    "vddl"                      = {}
+    "warp-and-weft"             = {}
     "workbench-design-spec-tmp" = {}
   }
 
@@ -201,6 +177,8 @@ locals {
         # A repository with Actions on is gated unless it says otherwise.
         ci_gated        = try(repo.ci_gated, repo.actions_enabled, local.actions_enabled)
         required_checks = try(repo.required_checks, ["required"])
+        # Off unless a workflow must commit to the default branch itself.
+        actions_push_bypass = try(repo.actions_push_bypass, false)
       },
     )
   }
@@ -237,6 +215,7 @@ module "repo" {
   actions_enabled      = each.value.actions_enabled
   ci_gated             = each.value.ci_gated
   required_checks      = each.value.required_checks
+  actions_push_bypass  = each.value.actions_push_bypass
   actions_required     = each.key == local.delivery_repository
   sha_pinning_required = local.enforce_sha_pinning
 }

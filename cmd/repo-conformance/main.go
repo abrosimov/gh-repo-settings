@@ -21,7 +21,7 @@ const (
 	programName  = "repo-conformance"
 	defaultOwner = "abrosimov"
 
-	// Longer than GitHub's own GraphQL execution limit, so a slow page fails with GitHub's error rather than ours.
+	// Longer than GitHub's own processing limit, so a slow request fails with GitHub's error rather than ours.
 	requestTimeout = 20 * time.Second
 )
 
@@ -32,6 +32,7 @@ type environment struct {
 	stderr     io.Writer
 	getenv     func(string) string
 	httpClient *http.Client
+	backoff    conformance.Backoff
 	endpoint   string
 }
 
@@ -41,7 +42,8 @@ func main() {
 		stderr:     os.Stderr,
 		getenv:     os.Getenv,
 		httpClient: &http.Client{Timeout: requestTimeout},
-		endpoint:   conformance.GitHubGraphQLEndpoint,
+		backoff:    conformance.DefaultBackoff,
+		endpoint:   conformance.GitHubAPIURL,
 	}
 	os.Exit(run(context.Background(), os.Args[1:], env))
 }
@@ -66,7 +68,7 @@ func run(ctx context.Context, args []string, env *environment) int {
 	if token == "" {
 		return fail(env.stderr, errTokenUnset)
 	}
-	client := conformance.NewGitHubClient(env.httpClient, env.endpoint, token)
+	client := conformance.NewGitHubClient(env.httpClient, env.endpoint, token, env.backoff)
 	repositories, err := client.Repositories(ctx, *owner)
 	if err != nil {
 		return fail(env.stderr, err)

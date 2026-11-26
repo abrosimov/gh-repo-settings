@@ -82,6 +82,11 @@ There are no exceptions per repository. The check prints one line per repository
 and exits 1 when any exists, or 2 when it cannot read GitHub. The `plan` job runs it for
 `abrosimov`, so pull requests and the daily run fail on drift; locally, run `task conformance`.
 
+The check reads the REST API with the token in `GITHUB_TOKEN`, retrying a request that fails with
+502, 503, 504 or a network error. For a user the token must be that user's own, since GitHub lists
+a user's private repositories only to the user; a fine-grained token needs read access to
+Metadata and Contents.
+
 ## How changes ship
 
 CI does the work; a laptop plans freely and applies only in an emergency (see

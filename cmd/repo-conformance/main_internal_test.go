@@ -8,14 +8,20 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
-const testToken = "s3cr3t-token-value"
+const (
+	testToken = "s3cr3t-token-value"
+	testOwner = "abrosimov"
+)
 
 var errWriteRefused = errors.New("write refused")
 
@@ -24,40 +30,46 @@ type refusingWriter struct{}
 func (refusingWriter) Write([]byte) (int, error) { return 0, errWriteRefused }
 
 type request struct {
+	path          string
 	authorization string
-	variables     map[string]any
 }
 
+type handler func(w http.ResponseWriter, r *http.Request)
+
 type fakeGitHub struct {
-	respond  func(index int, w http.ResponseWriter)
+	t        *testing.T
+	routes   map[string]handler
 	requests []request
 	mu       sync.Mutex
 }
 
 func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	raw, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	var body struct {
-		Variables map[string]any `json:"variables"`
-	}
-	if err := json.Unmarshal(raw, &body); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
 	f.mu.Lock()
-	f.requests = append(f.requests, request{authorization: r.Header.Get("Authorization"), variables: body.Variables})
-	index := len(f.requests) - 1
+	f.requests = append(f.requests, request{path: r.URL.EscapedPath(), authorization: r.Header.Get("Authorization")})
+	route := f.routes[r.URL.EscapedPath()]
 	f.mu.Unlock()
-	f.respond(index, w)
+	if route == nil {
+		f.t.Errorf("unexpected request %s %s", r.Method, r.URL)
+		w.WriteHeader(http.StatusTeapot)
+		return
+	}
+	route(w, r)
 }
 
 func (f *fakeGitHub) Requests() []request {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]request(nil), f.requests...)
+}
+
+func (f *fakeGitHub) Count(path string) int {
+	count := 0
+	for _, r := range f.Requests() {
+		if r.path == path {
+			count++
+		}
+	}
+	return count
 }
 
 type harness struct {
@@ -67,9 +79,9 @@ type harness struct {
 	github *fakeGitHub
 }
 
-func newHarness(t *testing.T, token string, respond func(index int, w http.ResponseWriter)) *harness {
+func newHarness(t *testing.T, token string, routes map[string]handler) *harness {
 	t.Helper()
-	github := &fakeGitHub{respond: respond}
+	github := &fakeGitHub{t: t, routes: routes}
 	server := httptest.NewServer(github)
 	t.Cleanup(server.Close)
 	h := &harness{stdout: &bytes.Buffer{}, stderr: &bytes.Buffer{}, github: github}
@@ -83,6 +95,7 @@ func newHarness(t *testing.T, token string, respond func(index int, w http.Respo
 			return ""
 		},
 		httpClient: server.Client(),
+		backoff:    func(int) time.Duration { return 0 },
 		endpoint:   server.URL,
 	}
 	return h
@@ -92,10 +105,19 @@ func (h *harness) run(args ...string) int {
 	return run(context.Background(), args, h.env)
 }
 
-func respondWith(status int, body string) func(int, http.ResponseWriter) {
-	return func(_ int, w http.ResponseWriter) {
+func respondWith(status int, body string) handler {
+	return func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(status)
 		if _, err := io.WriteString(w, body); err != nil {
+			return
+		}
+	}
+}
+
+func respondJSON(value any) handler {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(value); err != nil {
 			return
 		}
 	}
@@ -109,52 +131,48 @@ type repoJSON struct {
 	archived bool
 }
 
-func page(t *testing.T, repos ...repoJSON) string {
-	t.Helper()
-	type entry struct {
-		Name string `json:"name"`
-		Type string `json:"type"`
-	}
-	nodes := make([]map[string]any, 0, len(repos))
+func usersPath(owner string) string { return "/users/" + owner }
+
+func orgReposPath(owner string) string { return "/orgs/" + owner + "/repos" }
+
+func rootTreePath(owner, repo string) string {
+	return "/repos/" + owner + "/" + repo + "/git/trees/main"
+}
+
+func organisationRoutes(owner string, repos ...repoJSON) map[string]handler {
+	listed := make([]map[string]any, 0, len(repos))
+	routes := map[string]handler{usersPath(owner): respondJSON(map[string]any{"login": owner, "type": "Organization"})}
 	for _, repo := range repos {
-		entries := make([]entry, 0, len(repo.root))
-		for _, name := range repo.root {
-			entries = append(entries, entry{Name: name, Type: "blob"})
-		}
-		node := map[string]any{
-			"name":       repo.name,
-			"isFork":     repo.fork,
-			"isArchived": repo.archived,
-			"isEmpty":    false,
-			"root":       map[string]any{"entries": entries},
-			"dotGitHub":  nil,
-			"docs":       nil,
+		item := map[string]any{
+			"name":           repo.name,
+			"owner":          map[string]any{"login": owner, "type": "Organization"},
+			"fork":           repo.fork,
+			"archived":       repo.archived,
+			"default_branch": "main",
+			"license":        nil,
 		}
 		if repo.licence != "" {
-			node["licenseInfo"] = map[string]any{"spdxId": repo.licence}
-		} else {
-			node["licenseInfo"] = nil
+			item["license"] = map[string]any{"spdx_id": repo.licence}
 		}
-		nodes = append(nodes, node)
+		listed = append(listed, item)
+		entries := make([]map[string]string, 0, len(repo.root))
+		for _, name := range repo.root {
+			entries = append(entries, map[string]string{"path": name, "type": "blob", "sha": "sha-" + name})
+		}
+		routes[rootTreePath(owner, repo.name)] = respondJSON(map[string]any{"tree": entries})
 	}
-	raw, err := json.Marshal(map[string]any{"data": map[string]any{"repositoryOwner": map[string]any{"repositories": map[string]any{
-		"nodes":    nodes,
-		"pageInfo": map[string]any{"hasNextPage": false, "endCursor": nil},
-	}}}})
-	if err != nil {
-		t.Fatalf("encoding fixture: %v", err)
-	}
-	return string(raw)
+	routes[orgReposPath(owner)] = respondJSON(listed)
+	return routes
 }
 
 func TestRunConformingOwnerExitsZeroWithSummaryOnStderrOnly(t *testing.T) {
-	body := page(t,
+	routes := organisationRoutes(testOwner,
 		repoJSON{name: "one", licence: "Apache-2.0", root: []string{"README.md"}},
 		repoJSON{name: "two", licence: "Apache-2.0"},
 		repoJSON{name: "forked", licence: "MIT", root: []string{"CONTRIBUTING.md"}, fork: true},
 		repoJSON{name: "old", licence: "MIT", archived: true},
 	)
-	h := newHarness(t, testToken, respondWith(http.StatusOK, body))
+	h := newHarness(t, testToken, routes)
 
 	code := h.run()
 
@@ -167,15 +185,20 @@ func TestRunConformingOwnerExitsZeroWithSummaryOnStderrOnly(t *testing.T) {
 	if got, want := h.stderr.String(), "abrosimov: 2 repositories checked, 0 violation(s)\n"; got != want {
 		t.Errorf("stderr = %q, want %q", got, want)
 	}
+	for _, skipped := range []string{"forked", "old"} {
+		if got := h.github.Count(rootTreePath(testOwner, skipped)); got != 0 {
+			t.Errorf("the tree of %s was read %d times, want 0", skipped, got)
+		}
+	}
 }
 
 func TestRunViolationsExitOneAndPrintEveryViolationOnStdout(t *testing.T) {
-	body := page(t,
+	routes := organisationRoutes(testOwner,
 		repoJSON{name: "b-none", root: []string{"README.md"}},
 		repoJSON{name: "a-mit", licence: "MIT", root: []string{"CONTRIBUTING.md", "SECURITY.md"}},
 		repoJSON{name: "c-fine", licence: "Apache-2.0"},
 	)
-	h := newHarness(t, testToken, respondWith(http.StatusOK, body))
+	h := newHarness(t, testToken, routes)
 
 	code := h.run()
 
@@ -205,7 +228,8 @@ func TestRunSendsTokenAndOwnerToGitHub(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := newHarness(t, testToken, respondWith(http.StatusOK, page(t, repoJSON{name: "one", licence: "Apache-2.0"})))
+			routes := organisationRoutes(tc.wantOwner, repoJSON{name: "one", licence: "Apache-2.0"})
+			h := newHarness(t, testToken, routes)
 
 			code := h.run(tc.args...)
 
@@ -213,14 +237,16 @@ func TestRunSendsTokenAndOwnerToGitHub(t *testing.T) {
 				t.Fatalf("exit code = %d, want 0; stderr: %s", code, h.stderr)
 			}
 			requests := h.github.Requests()
-			if len(requests) != 1 {
-				t.Fatalf("got %d requests, want 1", len(requests))
+			if len(requests) != 3 {
+				t.Fatalf("got %d requests, want 3 (owner, listing, tree)", len(requests))
 			}
-			if requests[0].variables["owner"] != tc.wantOwner {
-				t.Errorf("owner variable = %v, want %s", requests[0].variables["owner"], tc.wantOwner)
+			if requests[0].path != usersPath(tc.wantOwner) {
+				t.Errorf("first request path = %q, want %q", requests[0].path, usersPath(tc.wantOwner))
 			}
-			if want := "Bearer " + testToken; requests[0].authorization != want {
-				t.Errorf("Authorization = %q, want %q", requests[0].authorization, want)
+			for i, r := range requests {
+				if want := "Bearer " + testToken; r.authorization != want {
+					t.Errorf("request %d (%s) Authorization = %q, want %q", i, r.path, r.authorization, want)
+				}
 			}
 			if want := tc.wantOwner + ": 1 repositories checked"; !strings.Contains(h.stderr.String(), want) {
 				t.Errorf("stderr = %q, want it to contain %q", h.stderr, want)
@@ -231,24 +257,46 @@ func TestRunSendsTokenAndOwnerToGitHub(t *testing.T) {
 
 func TestRunGitHubFailuresExitTwoWithMessageOnStderrAndNothingOnStdout(t *testing.T) {
 	cases := []struct {
+		replace map[string]handler
 		name    string
-		respond func(int, http.ResponseWriter)
 		contain string
 	}{
-		{"unauthorised", respondWith(http.StatusUnauthorized, `{"message":"Bad credentials"}`), "401"},
-		{"server error", respondWith(http.StatusInternalServerError, "boom"), "500"},
-		{"graphql errors", respondWith(http.StatusOK, `{"data":null,"errors":[{"message":"query refused"}]}`), "query refused"},
-		{"unknown owner", respondWith(http.StatusOK, `{"data":{"repositoryOwner":null}}`), "no GitHub user or organisation"},
 		{
-			"unreadable contents",
-			respondWith(http.StatusOK, strings.Replace(page(t, repoJSON{name: "hidden"}), `"root":{"entries":[]}`, `"root":null`, 1)),
-			"abrosimov/hidden",
+			name:    "unauthorised",
+			replace: map[string]handler{usersPath(testOwner): respondWith(http.StatusUnauthorized, `{"message":"Bad credentials"}`)},
+			contain: "401",
 		},
-		{"malformed JSON", respondWith(http.StatusOK, "{"), "decoding repositories"},
+		{
+			name:    "server error",
+			replace: map[string]handler{usersPath(testOwner): respondWith(http.StatusInternalServerError, "boom")},
+			contain: "500",
+		},
+		{
+			name:    "unknown owner",
+			replace: map[string]handler{usersPath(testOwner): respondWith(http.StatusNotFound, `{"message":"Not Found"}`)},
+			contain: "no GitHub user or organisation",
+		},
+		{
+			name:    "unreadable contents",
+			replace: map[string]handler{rootTreePath(testOwner, "hidden"): respondWith(http.StatusForbidden, `{"message":"forbidden"}`)},
+			contain: "abrosimov/hidden",
+		},
+		{
+			name:    "malformed JSON",
+			replace: map[string]handler{orgReposPath(testOwner): respondWith(http.StatusOK, "{")},
+			contain: "decoding repositories",
+		},
+		{
+			name:    "gateway that keeps failing",
+			replace: map[string]handler{orgReposPath(testOwner): respondWith(http.StatusBadGateway, "<html>bad gateway</html>")},
+			contain: "502 <html>bad gateway</html>",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := newHarness(t, testToken, tc.respond)
+			routes := organisationRoutes(testOwner, repoJSON{name: "hidden", licence: "Apache-2.0"})
+			maps.Copy(routes, tc.replace)
+			h := newHarness(t, testToken, routes)
 
 			code := h.run()
 
@@ -269,8 +317,8 @@ func TestRunGitHubFailuresExitTwoWithMessageOnStderrAndNothingOnStdout(t *testin
 }
 
 func TestRunWithUnreachableGitHubExitsTwoWithoutLeakingTheToken(t *testing.T) {
-	h := newHarness(t, testToken, respondWith(http.StatusOK, "{}"))
-	h.env.endpoint = "http://127.0.0.1:1/graphql"
+	h := newHarness(t, testToken, nil)
+	h.env.endpoint = "http://127.0.0.1:1"
 
 	code := h.run()
 
@@ -280,10 +328,59 @@ func TestRunWithUnreachableGitHubExitsTwoWithoutLeakingTheToken(t *testing.T) {
 	if h.stdout.Len() != 0 || strings.Contains(h.stderr.String(), testToken) {
 		t.Errorf("stdout = %q, stderr = %q; want empty stdout and no token", h.stdout, h.stderr)
 	}
+	if !strings.Contains(h.stderr.String(), "calling the GitHub API") {
+		t.Errorf("stderr = %q, want it to report the failed call", h.stderr)
+	}
+}
+
+func TestRunRetriesATransientGitHubFailureAndGivesUpAfterThreeAttempts(t *testing.T) {
+	t.Run("recovers after one bad gateway", func(t *testing.T) {
+		routes := organisationRoutes(testOwner, repoJSON{name: "one", licence: "Apache-2.0"})
+		owner := routes[usersPath(testOwner)]
+		var calls atomic.Int32
+		routes[usersPath(testOwner)] = func(w http.ResponseWriter, r *http.Request) {
+			if calls.Add(1) == 1 {
+				respondWith(http.StatusBadGateway, "bad gateway")(w, r)
+				return
+			}
+			owner(w, r)
+		}
+		h := newHarness(t, testToken, routes)
+
+		code := h.run()
+
+		if code != 0 {
+			t.Errorf("exit code = %d, want 0; stderr: %s", code, h.stderr)
+		}
+		if got := h.github.Count(usersPath(testOwner)); got != 2 {
+			t.Errorf("the owner was looked up %d times, want 2", got)
+		}
+		if got, want := h.stderr.String(), "abrosimov: 1 repositories checked, 0 violation(s)\n"; got != want {
+			t.Errorf("stderr = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("gives up after three bad gateways", func(t *testing.T) {
+		routes := organisationRoutes(testOwner)
+		routes[usersPath(testOwner)] = respondWith(http.StatusBadGateway, "bad gateway")
+		h := newHarness(t, testToken, routes)
+
+		code := h.run()
+
+		if code != 2 {
+			t.Errorf("exit code = %d, want 2", code)
+		}
+		if got := h.github.Count(usersPath(testOwner)); got != 3 {
+			t.Errorf("the owner was looked up %d times, want 3", got)
+		}
+		if h.stdout.Len() != 0 {
+			t.Errorf("stdout = %q, want empty", h.stdout)
+		}
+	})
 }
 
 func TestRunWithCancelledContextExitsTwo(t *testing.T) {
-	h := newHarness(t, testToken, respondWith(http.StatusOK, page(t)))
+	h := newHarness(t, testToken, organisationRoutes(testOwner))
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
@@ -298,7 +395,7 @@ func TestRunWithCancelledContextExitsTwo(t *testing.T) {
 }
 
 func TestRunWithoutTokenExitsTwoBeforeCallingGitHub(t *testing.T) {
-	h := newHarness(t, "", respondWith(http.StatusOK, page(t)))
+	h := newHarness(t, "", nil)
 
 	code := h.run()
 
@@ -317,7 +414,7 @@ func TestRunWithoutTokenExitsTwoBeforeCallingGitHub(t *testing.T) {
 }
 
 func TestRunTokenUnsetMessageSeparatesTheReasonFromTheInstruction(t *testing.T) {
-	h := newHarness(t, "", respondWith(http.StatusOK, page(t)))
+	h := newHarness(t, "", nil)
 
 	h.run()
 
@@ -338,7 +435,7 @@ func TestRunRejectsBadArgumentsWithExitTwoBeforeCallingGitHub(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := newHarness(t, testToken, respondWith(http.StatusOK, page(t)))
+			h := newHarness(t, testToken, nil)
 
 			code := h.run(tc.args...)
 
@@ -361,7 +458,7 @@ func TestRunRejectsBadArgumentsWithExitTwoBeforeCallingGitHub(t *testing.T) {
 func TestRunHelpExitsZeroWithUsageOnStderr(t *testing.T) {
 	for _, flag := range []string{"-h", "--help", "-help"} {
 		t.Run(flag, func(t *testing.T) {
-			h := newHarness(t, "", respondWith(http.StatusOK, page(t)))
+			h := newHarness(t, "", nil)
 
 			code := h.run(flag)
 
@@ -383,7 +480,7 @@ func TestRunHelpExitsZeroWithUsageOnStderr(t *testing.T) {
 }
 
 func TestRunExitsTwoWhenViolationsCannotBeWritten(t *testing.T) {
-	h := newHarness(t, testToken, respondWith(http.StatusOK, page(t, repoJSON{name: "mit", licence: "MIT"})))
+	h := newHarness(t, testToken, organisationRoutes(testOwner, repoJSON{name: "mit", licence: "MIT"}))
 	h.env.stdout = refusingWriter{}
 
 	code := h.run()
@@ -397,7 +494,7 @@ func TestRunExitsTwoWhenViolationsCannotBeWritten(t *testing.T) {
 }
 
 func TestRunExitsTwoWhenTheSummaryCannotBeWritten(t *testing.T) {
-	h := newHarness(t, testToken, respondWith(http.StatusOK, page(t, repoJSON{name: "ok", licence: "Apache-2.0"})))
+	h := newHarness(t, testToken, organisationRoutes(testOwner, repoJSON{name: "ok", licence: "Apache-2.0"}))
 	h.env.stderr = refusingWriter{}
 
 	if code := h.run(); code != 2 {

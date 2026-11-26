@@ -52,7 +52,6 @@ locals {
       visibility      = "public"
       description     = "Default issue and pull request templates and community health files for every repository of abrosimov"
       actions_enabled = true
-      ci_gated        = true
     }
     "2026-june-ai-ideas-synthesis" = {}
     "agents-hooks-guard"           = {}
@@ -68,11 +67,9 @@ locals {
     "cv" = {}
     "daidalos" = {
       actions_enabled = true
-      ci_gated        = true
     }
     "devbox-setup" = {
       actions_enabled = true
-      ci_gated        = true
     }
     "drive"                           = {}
     "fpf-to-obsidian-vault-converter" = {}
@@ -84,7 +81,6 @@ locals {
     "go-devtools" = {}
     "go-kdl2" = {
       actions_enabled = true
-      ci_gated        = true
     }
     "go-provider" = {}
     "grpcApp"     = {}
@@ -105,7 +101,6 @@ locals {
     "ncp_database" = {}
     "nomos" = {
       actions_enabled = true
-      ci_gated        = true
     }
     "obsidian-content-plugin" = {}
     "obsidian-notes"          = {}
@@ -123,17 +118,14 @@ locals {
     }
     "pinax" = {
       actions_enabled = true
-      ci_gated        = true
     }
     "politeia" = {}
     "proj" = {
       actions_enabled = true
-      ci_gated        = true
     }
     "py-core" = {}
     "renovate-config" = {
       actions_enabled = true
-      ci_gated        = true
     }
     "repo-template" = {
       visibility      = "public"
@@ -141,7 +133,6 @@ locals {
       is_template     = true
       template        = null
       actions_enabled = true
-      ci_gated        = true
     }
     "setup_lab" = {
       actions_enabled = true

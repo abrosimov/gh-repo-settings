@@ -54,17 +54,11 @@ locals {
       ci_gated        = true
     }
     "2026-june-ai-ideas-synthesis" = {}
-    # required_checks below carries the checks a repository's own ruleset
-    # required before the baseline became the only one; each goes once its
-    # CI exposes required. They take effect only while Actions are on.
-    "agents-hooks-guard" = {
-      required_checks = ["CI"]
-    }
-    "aletheia" = {}
-    "apme"     = {}
+    "agents-hooks-guard"           = {}
+    "aletheia"                     = {}
+    "apme"                         = {}
     "arche-go" = {
       actions_enabled = true
-      required_checks = ["lint + test", "coverage"]
     }
     "autarkeia" = {
       visibility      = "private"
@@ -79,10 +73,8 @@ locals {
       actions_enabled = true
       ci_gated        = true
     }
-    "drive" = {}
-    "fpf-to-obsidian-vault-converter" = {
-      required_checks = ["Lint, types, tests", "vaultcheck"]
-    }
+    "drive"                           = {}
+    "fpf-to-obsidian-vault-converter" = {}
     "gh-repo-settings" = {
       visibility  = "public"
       description = "Unified GitHub repository and organisation settings for abrosimov and abrosimov-tech, managed with OpenTofu"
@@ -104,6 +96,7 @@ locals {
     }
     "kadmos"           = {}
     "llm-orchestrator" = {}
+    # inspect reports from its own workflow, outside required.
     "llm-tools-configuration" = {
       actions_enabled = true
       required_checks = ["required", "inspect"]
@@ -119,9 +112,7 @@ locals {
     "otelcol-otelbox" = {
       actions_enabled = true
     }
-    "personal-iwe-template" = {
-      required_checks = ["Validate vault scaffold"]
-    }
+    "personal-iwe-template" = {}
     "pfs" = {
       visibility  = "private"
       description = "Personal finance system: budgeting and tracking of equity and assets"
@@ -130,9 +121,7 @@ locals {
       actions_enabled = true
       ci_gated        = true
     }
-    "politeia" = {
-      required_checks = ["Format, lint, and test"]
-    }
+    "politeia" = {}
     "proj" = {
       actions_enabled = true
       ci_gated        = true
@@ -152,27 +141,12 @@ locals {
     }
     "setup_lab" = {
       actions_enabled = true
-      required_checks = ["CI gate"]
     }
     "tamias" = {
       actions_enabled = true
     }
-    "vddl" = {
-      required_checks = [
-        "Generate Code",
-        "Lint Go",
-        "Lint Frontend",
-        "Lint Python",
-        "Lint Proto",
-        "Test Go",
-        "Test Frontend",
-        "Test Python",
-        "E2E Tests",
-      ]
-    }
-    "warp-and-weft" = {
-      required_checks = ["vault-check"]
-    }
+    "vddl"                      = {}
+    "warp-and-weft"             = {}
     "workbench-design-spec-tmp" = {}
   }
 

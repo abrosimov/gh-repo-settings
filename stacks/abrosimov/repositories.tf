@@ -44,6 +44,7 @@ locals {
   #     actions_enabled = true      # optional: overrides the stack-wide switch
   #     ci_gated        = false     # optional: gated by default once Actions are on
   #     required_checks = ["CI"]    # optional: until the CI exposes required
+  #     actions_push_bypass = true  # optional: its workflows may push to the default branch
   #   }
   declared_repositories = {
     # GitHub reads default community health files only from a public .github.
@@ -109,8 +110,11 @@ locals {
     "obsidian-content-plugin" = {}
     "obsidian-notes"          = {}
     "obsidian-tasks-system"   = {}
+    # Its release workflow commits the Homebrew formula's checksums to the
+    # default branch once the release they describe exists.
     "otelcol-otelbox" = {
-      actions_enabled = true
+      actions_enabled     = true
+      actions_push_bypass = true
     }
     "personal-iwe-template" = {}
     "pfs" = {
@@ -182,6 +186,8 @@ locals {
         # A repository with Actions on is gated unless it says otherwise.
         ci_gated        = try(repo.ci_gated, repo.actions_enabled, local.actions_enabled)
         required_checks = try(repo.required_checks, ["required"])
+        # Off unless a workflow must commit to the default branch itself.
+        actions_push_bypass = try(repo.actions_push_bypass, false)
       },
     )
   }
@@ -218,6 +224,7 @@ module "repo" {
   actions_enabled      = each.value.actions_enabled
   ci_gated             = each.value.ci_gated
   required_checks      = each.value.required_checks
+  actions_push_bypass  = each.value.actions_push_bypass
   actions_required     = each.key == local.delivery_repository
   sha_pinning_required = local.enforce_sha_pinning
 }

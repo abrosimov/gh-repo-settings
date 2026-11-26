@@ -77,7 +77,7 @@ variable "actions_required" {
 }
 
 variable "sha_pinning_required" {
-  description = "Whether to require every action and reusable workflow to be pinned to a full commit SHA. A workflow with a tag reference stops starting once this is on. False leaves the repository's current setting untouched rather than turning it off."
+  description = "Whether to require every action, including those from the owner and from GitHub, to be pinned to a full commit SHA. Reusable workflows can still be referenced by tag. A workflow that uses an action by tag stops starting once this is on. False leaves the repository's current setting untouched rather than turning it off."
   type        = bool
   default     = true
 }

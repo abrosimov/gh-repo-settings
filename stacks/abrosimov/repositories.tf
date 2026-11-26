@@ -17,9 +17,9 @@ locals {
   # Off since 2026-11-01 to save Actions minutes while the baseline settles.
   actions_enabled = false
 
-  # On since every workflow of a repository with Actions on is pinned. A
-  # repository switched on later must have its workflows pinned first: a tag
-  # reference stops its workflow from starting at all.
+  # On since every action used by a workflow of a repository with Actions on is
+  # pinned. A repository switched on later must have its actions pinned first: an
+  # action referenced by tag stops its workflow from starting at all.
   enforce_sha_pinning = true
 
   # Every repository OpenTofu creates is generated from this template,

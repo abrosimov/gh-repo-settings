@@ -156,6 +156,12 @@ linters:
           - misspell
         text: '`COLOR` is a misspelling'
 
+      # Organization is the account type GitHub's REST API reports; only the
+      # capitalised value is exempted so prose stays British.
+      - linters:
+          - misspell
+        text: '`Organization` is a misspelling'
+
       # ---------------------------------------------------------------------
       # What a linter means in a test file.
       #
